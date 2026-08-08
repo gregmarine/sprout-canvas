@@ -1086,6 +1086,17 @@ phase, not by preference.
 
 ## 11. Session checklist
 
+**This project is run one phase per session, with the session cleared in between.** Two files exist
+so that a cold session loses nothing:
+
+- **`CLAUDE.md`** (repo root) — loaded automatically at session start. Thin by design: it points here
+  and carries only the always-relevant guardrails. It does not duplicate this document.
+- **`.claude/skills/device-build-install/SKILL.md`** — build/install commands, the device serial
+  table, the BOOX enable-after-sideload step, and how to verify a launch actually worked.
+
+Keep both in sync with this plan. If a phase changes a constraint, a device requirement, or a build
+command, update the corresponding file in the same commit — a stale guardrail is worse than none.
+
 At the **start** of a phase session:
 1. Read §2 Decisions, §3 Architecture, §5 Hard-Won Lessons, and the phase's own section.
 2. Check §8 for the previous phase's notes and any carry-over.

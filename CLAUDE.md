@@ -59,6 +59,12 @@ These apply everywhere. They are not repeated in the plan's phase sections.
   `JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home`, or set
   `org.gradle.java.home` in `~/.gradle/gradle.properties` (machine-local, uncommitted). See
   PLAN.md §5.12.
+- **`android.enableJetifier=true` is required by `:canvas-onyx`**, and by any app that depends on
+  it. `onyxsdk-base` pulls `pub.devrel:easypermissions:0.2.1`, which drags in the whole
+  `com.android.support:appcompat-v7:24.2.1` tree; without jetifier, packaging fails with a wall of
+  `Duplicate class android.support.v4.…` naming AndroidX and a support library nothing here asked
+  for. It costs a transform pass over every dependency — that is the price of the BOOX ink path.
+  See PLAN.md §5.7 and the note in `gradle.properties`.
 - **`:canvas` has exactly one dependency: `androidx.annotation`**, on the `api` configuration
   because its annotations appear on the public surface. No coroutines, no serialization, no
   Material, no Compose, **no `androidx.lifecycle`**. A drawing library must not dictate a host app's
@@ -84,7 +90,7 @@ These apply everywhere. They are not repeated in the plan's phase sections.
 
 ```
 canvas/            :canvas             the library — zero vendor dependencies
-canvas-onyx/       :canvas-onyx        BOOX adapter          (Phase 4 — does not exist yet)
+canvas-onyx/       :canvas-onyx        BOOX adapter          (Phase 4 — in progress)
 canvas-supernote/  :canvas-supernote   Supernote adapter     (Phase 5 — does not exist yet)
 lab/               :lab                Sprout Canvas Lab — the conformance harness
 gradle/libs.versions.toml              single source of dependency versions

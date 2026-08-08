@@ -16,5 +16,8 @@ class LabApp : Application() {
     override fun onCreate() {
         super.onCreate()
         SproutCanvas.initialize(this)
+        // Before any canvas is inflated: a canvas reads the committed-layer renderer when its
+        // engine attaches, so a later restore would miss the first screen opened (LabSettings).
+        LabSettings.restore(this)
     }
 }

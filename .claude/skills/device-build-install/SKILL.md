@@ -105,6 +105,22 @@ draw — which is also how the finger-draws-nothing behaviour gets checked.
 > pressure-sensitive pens fall back to their velocity curve. Anything about pressure, tilt or
 > writing feel still needs the real pen in a real hand.
 
+> **⚠⚠ On BOOX, injected stylus events draw nothing at all.** The Onyx raw-drawing pipeline reads
+> the physical EMR digitizer below the view system, and a virtual `uinput` device never reaches it.
+> An injected stroke produces `raw callbacks: 0` with the session open and `isRawDrawingInputEnabled`
+> reporting `true` — so it looks like a broken adapter rather than an unusable tool.
+>
+> **The whole BOOX ink protocol is hand-tested.** Navigation, tool arming, screenshots and the
+> Device report can all still be scripted; only the ink cannot. Plan device sessions around that,
+> and keep each manual pass short — set the tool state over adb first, then ask for one or two
+> strokes at a time. (PLAN.md §5.15)
+
+> **⚠ Two BOOX quirks that waste adb taps.** The Lab's top button row sits under the BOOX status
+> bar, so `input tap` up there pulls the notification shade down instead of pressing the button —
+> read live bounds from `uiautomator dump` rather than reusing remembered coordinates, and prefer
+> controls lower on the screen. And **button positions shift** whenever a control is added to a row,
+> which is how a "Refresh" tap silently became a "Clear" tap and threw away a screen of measurements.
+
 The Lab's screens are `exported="false"`, so `am start` cannot open them directly — launch
 `LabActivity` and `input tap` the button you want.
 
@@ -163,7 +179,7 @@ ship.
 | Device | Nickname | Serial | Panel |
 |---|---|---|---|
 | BOOX Go 10.3 Gen 2 | **G102** | `b7a46e13` | 10.3" mono — **Onyx flagship target** |
-| BOOX NoteAir5C | **NA5C** | `92c16533` ✅ | 10.3" Kaleido colour |
+| BOOX NoteAir5C | **NA5C** | `92c16533` ✅ | 10.3" Kaleido colour — **Phase 4 firmware ink verified here** |
 | BOOX Note Max | **MAX** | `6325773d` | 13.3" mono |
 | BOOX Go 6 Gen II | **G6** | `DAF86F61` | 6" mono |
 | BOOX Palma2 Pro | **P2P** | `287d2364` | 6.1" colour — **narrowest, `sw439dp`** |
@@ -203,7 +219,7 @@ Mirrors PLAN.md §7 — change them in both places or they drift.
 | 1 — Core model & API | None required ✅ *(done anyway on NA5C)* |
 | 2 — Generic engine | A generic stylus tablet: S26U and/or MIP11 ✅ *(done on MIP11)* |
 | 3 — Tooling & render fidelity | Same generic tablet |
-| 4 — Onyx adapter | G102 **and** one colour panel (NA5C or P2P) |
+| 4 — Onyx adapter | G102 **and** one colour panel — 🟡 NA5C done; G10 and G102 outstanding |
 | 5 — Supernote adapter | Nomad, plus Manta if present |
 | 6 — Conformance harness | All three platforms |
 | 7 — Packaging | One device per platform |

@@ -389,11 +389,60 @@ public class SproutCanvasView @JvmOverloads constructor(
         engine.releaseForHandoff()
     }
 
+    /**
+     * Hands the panel back to the Android view system, so the host's own chrome can repaint.
+     *
+     * ### The problem this solves, and it is not obvious
+     *
+     * On e-ink the firmware ink overlay **owns the whole panel** while it is active. That is what
+     * makes writing feel instant, and it means that for as long as it is armed, nothing the Android
+     * view system draws reaches the screen. A host app's toolbar can be tapped, its click handler
+     * runs, its button changes state — and the panel keeps showing the frame from before the tap.
+     *
+     * The symptom is a user interface that appears frozen while the canvas underneath works
+     * perfectly. It is invariably read as a bug in the button, and it is not: the button drew, and
+     * nobody was allowed to see it.
+     *
+     * ### What a host should do
+     *
+     * Call this when a **finger** touches chrome — a toolbar, a panel, a menu — before letting the
+     * control handle the event. Nothing else needs the overlay; the stylus is the only thing it
+     * exists for, and the engine re-arms it automatically on the next pen stroke, so the cost is
+     * nothing and the release is invisible.
+     *
+     * ```
+     * override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+     *     if (event.actionMasked == MotionEvent.ACTION_DOWN &&
+     *         event.getToolType(0) == MotionEvent.TOOL_TYPE_FINGER &&
+     *         !canvas.isPenActive                       // ← not optional; see below
+     *     ) {
+     *         canvas.releaseLiveInk()
+     *     }
+     *     return super.dispatchTouchEvent(event)
+     * }
+     * ```
+     *
+     * **Gate it on [isPenActive].** A palm resting on the glass mid-word produces finger events too,
+     * and releasing the overlay underneath a stroke in progress drops the stroke being written. That
+     * is the same single cause behind the phantom-gesture problem the gate exists for (PLAN.md §5.3).
+     *
+     * Use `dispatchTouchEvent` rather than a touch listener on the chrome: button children consume
+     * their own touches, so a listener on the container never fires.
+     *
+     * A no-op on engines that draw their own live ink, where the view system was never displaced.
+     */
+    @MainThread
+    public fun releaseLiveInk() {
+        assertMainThread("releaseLiveInk")
+        engine.releaseLiveInk()
+    }
+
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         renderContext = RenderContext(resources.displayMetrics.density)
         committedDirty = true
         engine.attach(this)
+        applyRendererOverrides()
         exclusionTracker.reattachListeners()
         engine.setTool(toolField)
         engine.setEraser(eraserField)
@@ -570,6 +619,7 @@ public class SproutCanvasView @JvmOverloads constructor(
 
         if (wasAttached) {
             engine.attach(this)
+            applyRendererOverrides()
             engine.setTool(toolField)
             engine.setEraser(eraserField)
             engine.resume()
@@ -583,6 +633,28 @@ public class SproutCanvasView @JvmOverloads constructor(
         }
         engine.onCommittedContentChanged(RepaintReason.HANDOFF)
         invalidate()
+    }
+
+    /**
+     * Lets the attached engine replace the renderers used for committed content.
+     *
+     * ### Why the table is rebuilt rather than patched
+     *
+     * Overrides have to be *withdrawn* when an engine goes away, not just installed when one
+     * arrives. Forcing a BOOX onto the generic engine is a supported thing to do — it is how the
+     * harness compares the two ink paths — and a canvas that kept drawing its committed strokes
+     * through the Onyx SDK afterwards would be answering a comparison with the thing being compared.
+     * Starting from a fresh table makes the withdrawal automatic instead of a step someone has to
+     * remember.
+     */
+    private fun applyRendererOverrides() {
+        renderers.reset()
+        val overrides = engine.rendererOverrides
+        if (overrides.isEmpty()) return
+        overrides.forEach { (pen, renderer) -> renderers.setRenderer(pen, renderer) }
+        SproutLog.d {
+            "engine '${engine.info.id}' renders ${overrides.keys.joinToString()} on the committed layer"
+        }
     }
 
     private fun announceEngineSelection() {

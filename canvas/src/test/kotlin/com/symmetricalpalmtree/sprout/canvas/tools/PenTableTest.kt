@@ -93,6 +93,18 @@ class PenTableTest {
         assertEquals(4, OnyxPenTable.overlayStyle(SproutPen.PENCIL))
     }
 
+    /**
+     * The highlighter's Onyx fidelity is a **measurement**, taken on a NoteAir5C in Phase 4.
+     *
+     * The two pens really are one firmware style separated by width and alpha. The device added two
+     * things: the overlay paints nothing at all for a translucent colour, so the adapter forces the
+     * live preview opaque — and that forced-opaque band still reads as a true highlight on a colour
+     * panel, with ink visible underneath throughout and no change on pen-up. Both paths look right,
+     * which is what `EMULATED` means.
+     *
+     * Moving this to `APPROXIMATE` is a claim that the live and committed strokes visibly disagree,
+     * and needs a panel to say so — plausibly a mono one, where the same band renders flat grey.
+     */
     @Test
     fun `marker and highlighter share the Onyx style and are separated by width and alpha`() {
         assertEquals(

@@ -82,6 +82,17 @@
             android:id="@+id/clearButton"
             style="@style/LabCompactButton"
             android:text="@string/action_clear" />
+
+        <!--
+            The committed-layer renderer, on the screen where the pens are actually compared rather
+            than only on the Device report. Two reasons it lives here: switching it is the whole
+            comparison, and the report's own controls sit in the top strip of the screen, where a
+            BOOX's status bar swallows the tap and pulls the notification shade down instead.
+        -->
+        <Button
+            android:id="@+id/renderModeButton"
+            style="@style/LabCompactButton"
+            android:text="@string/action_committed_layer" />
     </LinearLayout>
 
     <TextView

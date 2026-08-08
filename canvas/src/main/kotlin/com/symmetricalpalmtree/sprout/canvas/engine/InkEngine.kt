@@ -7,7 +7,9 @@ import android.view.MotionEvent
 import android.view.View
 import androidx.annotation.MainThread
 import com.symmetricalpalmtree.sprout.canvas.model.EraserSpec
+import com.symmetricalpalmtree.sprout.canvas.model.SproutPen
 import com.symmetricalpalmtree.sprout.canvas.model.ToolSpec
+import com.symmetricalpalmtree.sprout.canvas.render.StrokeRenderer
 
 /**
  * One platform's way of getting ink onto a screen: input capture plus **live** stroke display.
@@ -62,6 +64,28 @@ public interface InkEngine {
      * ordinary event.
      */
     public val isPenActive: Boolean
+
+    /**
+     * Renderers this engine wants used for **committed** content, replacing the library's own.
+     *
+     * ### Why an engine gets a say in a layer it does not own
+     *
+     * On e-ink the user watches the *firmware's* stroke appear and then looks at *our* committed
+     * stroke for the rest of the document's life. Those are two entirely separate pieces of drawing
+     * code, and where they disagree the disagreement is visible at the exact moment the pen lifts —
+     * the stroke changes shape under the user's hand. An adapter that can reach the vendor's own
+     * software renderers can close that gap in the one place it matters.
+     *
+     * Empty by default, which is the right answer for any engine whose live ink is already drawn by
+     * [drawLiveInk] — there the two paths are the same code and cannot disagree.
+     *
+     * Read once when the engine attaches. The map is applied to the view's own renderer table, so an
+     * engine that returns an entry for a pen owns that pen's committed appearance; every pen it does
+     * not name keeps the library's renderer.
+     *
+     * @see com.symmetricalpalmtree.sprout.canvas.render.StrokeRendererRegistry
+     */
+    public val rendererOverrides: Map<SproutPen, StrokeRenderer> get() = emptyMap()
 
     /** Binds the engine to the canvas view. Called when the view attaches to a window. */
     public fun attach(view: View)

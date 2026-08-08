@@ -28,6 +28,17 @@
             android:textSize="18sp"
             android:textStyle="bold" />
 
+        <!--
+            The committed-layer switch. It only means anything on a BOOX, where the firmware paints
+            live ink and something else has to draw the stroke afterwards — see OnyxRenderMode.
+            Switching it recreates the Activity, because a canvas reads the mode when its engine
+            attaches and re-reading it any other way would be a second mechanism to keep correct.
+        -->
+        <Button
+            android:id="@+id/renderModeButton"
+            style="@style/LabCompactButton"
+            android:text="@string/action_committed_layer" />
+
         <Button
             android:id="@+id/refreshButton"
             style="@style/LabCompactButton"

@@ -835,6 +835,105 @@ stroke** and then keep up. A golden renders a finished stroke and says nothing a
 which it appeared, so this needs the deferred performance harness (§9). The texture renderer places
 far more primitives per unit length than any other, so a first-stroke cost there is plausible.
 
+### 5.14 The BOOX raw pipeline speaks **view** coordinates, and gets it wrong silently
+
+`TouchHelper.setLimitRect` is relative to the **bound view**, not the screen. That was not the
+expected answer — the raw-input pipeline sits below the view system reading a digitizer that has no
+notion of a view — and screen coordinates were the reasonable guess the adapter shipped first.
+
+**The failure mode is what makes this worth a section.** On a canvas at screen offset `23, 1528`
+measuring 1814 × 929, arming the screen-space rect left the SDK holding a region almost entirely
+outside the view it was bound to. The session opened, `isRawDrawingInputEnabled` returned **`true`**,
+and the pen produced **nothing at all** — no ink, no callbacks, no error. An SDK that reports itself
+correctly armed while capturing a rectangle nobody can reach is indistinguishable from a broken
+digitizer.
+
+The reference project could never have caught this: its canvas is a full-screen view at the window
+origin, where the two spaces are numerically identical. A `SproutCanvasView` is a component, and this
+is the first time the question could arise.
+
+`CoordinateSpace` keeps a probe that settles the question from the first stroke that can — but note
+its limit: **a probe cannot rescue a wrong arming choice**, because arming in the wrong space means
+no points arrive to learn from. The default is a measurement, not a preference.
+
+### 5.15 `adb shell input stylus` cannot drive the Onyx raw pipeline
+
+§5.11 records that injected stylus events are genuine `TOOL_TYPE_STYLUS` and that most of a device
+protocol can be scripted with them. **That is true on the generic engine and false on Onyx.** The
+raw-drawing pipeline reads the physical EMR digitizer below the view system; a virtual `uinput`
+device never reaches it. Injected strokes produce `raw callbacks: 0` with the session open and input
+enabled.
+
+Consequence: **the BOOX protocol is hand-tested, end to end.** Navigation, tool arming and screenshots
+can still be scripted — only the ink cannot. Budget device sessions accordingly, and keep each manual
+pass short.
+
+### 5.16 Proving an exclusion zone works needs the zone *hidden*, not a contrasting colour
+
+Drawing a black stroke through a black overlay proves nothing, and a tester said so. The
+colour-independent proof is to **hide the overlays afterwards**: any ink written underneath is then
+revealed, and a canvas that refused correctly shows a clean gap.
+
+On the NA5C one gesture across a side panel and a popup produced `strokes: 2` and ink columns
+`194–742` and `1117–1799`, against a panel whose right edge was at 194 and a popup spanning
+742–1116 — agreement to the pixel. It is also a better test than the colour version, because it
+checks the *stored* data rather than what happens to be visible.
+
+That check also exposed a real defect: the engine was *skipping* out-of-zone points rather than
+ending the stroke, so a renderer joining consecutive samples would have drawn a straight line across
+the host's chrome had the firmware ever stopped enforcing its own limit rect. A stroke that wanders
+into a zone now **stops**, matching §3.7 and the generic engine, independently of the SDK.
+
+### 5.17 The overlay owns the whole panel, so host chrome cannot repaint until it is released
+
+While the firmware ink overlay is armed, **nothing the Android view system draws reaches the screen.**
+A host's button can be tapped, its handler runs, its state changes — and the panel keeps showing the
+frame from before the tap. It reads as a frozen UI over a canvas that works perfectly, and the
+button is invariably blamed.
+
+The fix is one call on any non-stylus touch, and it is a library concern rather than an app one, so
+it is public API: `SproutCanvasView.releaseLiveInk()`. **Gate it on `isPenActive`** — a palm produces
+finger events, and releasing under a live stroke drops it (§5.3).
+
+**`releaseLiveInk` and the pen-down re-arm are a matched pair.** Shipping the release without
+re-enabling the overlay in `onBeginRawDrawing` makes it a one-way door: the first finger tap kills
+live ink for the rest of the session, while capture and commit keep working perfectly. The pen
+appears to have silently stopped writing in real time — which was shipped, caught on hardware, and
+is exactly the class of bug this section exists to prevent.
+
+### 5.18 Two things the SDK reports that are not what the library documents
+
+Both were found by putting a real stroke through the adapter and reading the numbers back.
+
+- **Timestamps are `System.currentTimeMillis`, not `SystemClock.uptimeMillis`.** Nothing in the SDK
+  says so, and one stroke settles it beyond doubt — the two clocks are apart by roughly the age of
+  the Unix epoch. Intervals *within* a stroke are identical either way, so a host computing stroke
+  duration works perfectly while a host comparing against anything else on the device is wrong by
+  years. `TimestampClock` detects and converts rather than assuming, because five firmware families
+  and no documentation is not a safe place to apply an unconditional shift.
+- **`TouchPoint.size` is always `0.0`** on the NA5C, across 2746 samples, while the channel is
+  declared. That is precisely the failure `InkChannel` exists to prevent — absent must mean absent,
+  not zero. Left declared pending a second panel; if the G10 agrees, `SIZE` should come out of the
+  Onyx channel mask.
+
+### 5.19 A harness that misreports its own state invalidates the session, not just the test
+
+Two defects found by the tester within an hour of each other, both of which silently corrupted
+comparisons rather than failing:
+
+- **Buttons with no armed state.** On e-ink a tap produces no ripple, no press animation, nothing.
+  A tester walking nine pens had no way to know a tap had registered — and the status text could not
+  tell them either, because of §5.17. Selection is now shown by **inverting** the armed button;
+  a colour tint is invisible on a mono panel.
+- **Process-global settings reset on reinstall.** `OnyxRenderMode` is a Kotlin `object`, so every
+  `adb install` silently reverted the committed-layer renderer to its default. A whole comparison
+  round was run against the wrong renderer before the tester noticed the result had gone backwards.
+  Now persisted (`LabSettings`) and **named on the screen where the comparison happens**, not only on
+  the Device report.
+
+The general rule: any harness state that can differ from what the tester believes must be visible
+*where they are looking*, and must survive the rebuild loop.
+
 ---
 
 ## 6. Cross-cutting conventions
@@ -1184,7 +1283,7 @@ Update the row at the end of each phase, then commit and push.
 | 1 | Core model & public API contract | ✅ Complete | `ac9ce38` | 2026-08-07 | 151 JVM tests green (144 `:canvas`, 7 `:lab`); `build test` and `publishToMavenLocal` clean; explicit API mode re-verified by probe (a bare `fun f() = 42` fails the build). Four contract decisions taken with the user, all recorded in §10.3. Five things worth carrying forward: (1) **`StrokeSamples.channels` is derived, not passed** — §3.5 sketched it as a constructor parameter, but a mask supplied separately from the data it describes is a mask that can disagree with it; deriving deletes the failure mode. (2) **The vendor tables are `@RestrictTo(LIBRARY_GROUP)`** — adapters are separate Gradle modules so `internal` cannot reach them, but the Onyx style ints and Supernote pen codes must not become frozen public API; `PenFidelity` and `capabilities.fidelity()` stay fully public because that is what a host actually needs. (3) **`androidx.annotation` moved to `api`** — `@ColorInt` / `@IntDef` / `@MainThread` / `@RestrictTo` appear on the public surface, and an annotation a consumer's compiler cannot resolve does nothing. Still exactly one dependency. (4) **`-Xannotation-default-target=param-property`** is on for `:canvas`; without it a constructor-property annotation lands on the value parameter only, so a consumer reading the getter sees nothing. Lint then immediately caught a real `@IntDef` gap (`InkChannel.NONE` had to be declared as a legal value) — the annotations are load-bearing, not decorative. (5) **`SproutLog` was created here, not in Phase 2** — D11's missing-`initialize` error needed it. §3.9 corrected: `findViewTreeLifecycleOwner()` cannot be used, it needs `androidx.lifecycle`. Build environment: this machine's default `java` is now JDK 26, which Gradle 8.14 cannot run on — see §5.12. **Device-verified on NA5C** (not required by this phase): the report reads `initialized: true`, no adapters found, fallback engine selected, `app:sproutPen="fountain"` honoured from XML, `1 registered, 1 active` exclusion zone, and Ingest → Round-trip gives `strokes: 2 · round trip: identical`. Two things only hardware could show: (a) **`pm enable` loses a race with Onyx** — the NA5C re-disabled the package after a successful enable, so enable must be issued in the *same device shell* as the launch, every launch (§5.9 updated, skill updated); (b) the Lab's device report refreshed from `onResume` alone showed `0 active` zones with the toolbar plainly on the canvas, because zone computation is coalesced to one posted pass per layout and `onResume` runs before the first layout — now also refreshed from `onWindowFocusChanged`. That was a bug in the diagnostic, not the tracker, which is exactly the sort of thing that sends a later session hunting a fault that is not there. |
 | 2 | Generic engine: capture and render | ✅ Complete | `8c10fcb` | 2026-08-08 | **The canvas draws.** 255 JVM tests (241 `:canvas`, 14 `:lab`) + 20 instrumented tests on the MIP11 (0 skipped, so every channel assertion actually ran) + an 18-scene golden suite. Scope: at the user's direction Phase 2 delivered **all nine software renderers**, not the two the phase strictly needed — so most of Phase 3 landed here (see the Phase 3 note below). **R1 is resolved** — Robolectric with `NATIVE` graphics hosts the golden suite; 16 of 18 scenes are byte-identical to the Wacom tablet and the other two differ by 1 on one channel (`docs/golden-tier.md`). Seven things worth carrying forward: (1) **The `InkEngineHost` SPI gained `onEraseEnded()`** — one eraser swipe is one action to a user, so the strokes it removed are reported once at the gesture boundary rather than in batches, and a hardware engine gets exactly one panel repaint out of it instead of one per move event. (2) **Renderers are split into a pure-Kotlin solver and a thin `android.graphics` shell.** Taper curves, nib angle, dash cadence, decimation and grain determinism are all asserted in plain JUnit in milliseconds on every build; only *appearance* needs pixels. (3) **The renderer registry is per canvas, not global** — two canvases in one process can run different engines, which is exactly how the harness compares the hardware and software ink paths. (4) **Texture grain must be seeded from the stroke's own id**, or `setStrokes(getStrokes())` stops being a visual no-op for the pencil and charcoal alone — a G4 failure that would get blamed on the ingest path. (5) **Grain scale has to be decoupled from the width multiplier**: charcoal's ×5 scaled its stamps up with it until they read as a row of circles. (6) **A calligraphy nib modelled as a zero-thickness line draws nothing at all** when the stroke runs along its own angle — caught by a golden, not by geometry. (7) **Robolectric's default graphics mode records draw calls without executing them**, so any pixel test needs `@GraphicsMode(NATIVE)` or it passes forever while asserting nothing. Four bugs were found only by putting it on hardware — all fixed, all now covered by a test, all recorded in §5.10–§5.11 and `docs/conformance/mip11-2026-08-08.md`. |
 | 3 | Tooling & rendering fidelity | ✅ Complete | `42fd0df` | 2026-08-08 | **The renderers were delivered in Phase 2; this phase established what they actually look like.** Deliverables had already landed — all nine renderers, the curves, the multipliers, highlighter alpha, the colour chokepoint, `PenFidelity`, the Lab's Tools screen — so the work here was the two named remnants plus the device protocol, and the pen curves were **deliberately not tuned** (see §7's Phase 3 note; reaffirmed by the user this session). 255 JVM tests green; golden suite **18 → 33 scenes**. Five things worth carrying forward: (1) **A golden scene now holds a *list* of strokes.** `highlighter-over-ink` had drawn a highlighter onto a *blank bitmap* for two phases — a scene named for a blend it never performed, passing the whole time. Compositing is where a drawing library actually fails, and one stroke on white cannot express it. (2) **Width ladders found a real defect the single-width scenes were blind to** — texture grain becomes countable circles at `XXL` and pencil/charcoal swap character at `HAIRLINE`, both confirmed on hardware with a real pen. Recorded in §5.13 with pictures, pinned by goldens, left for the Phase 4/5 tuning pass to start from rather than fixed against preference. (3) **`CommittedLayer`'s software branch had no pixel coverage at all**, and it is the branch an Onyx panel repaint and every host screenshot take (§3.8). Losing it produces no exception and no geometry change — just a blank panel, in Phase 4, with nothing to point at. Both tiers now assert the committed path and the direct path are byte-identical. (4) **`GenericPenTable` stays all-`NATIVE`, re-examined and left alone on purpose.** `PenFidelity` describes how faithfully an *engine* reproduces a pen, not how good the ink looks; on an ordinary tablet there is no other path for the software renderer to be worse than. A table where every row says the same thing invites the suspicion nobody decided it, so the reasoning and what would overturn it are now in its KDoc. (5) **The calligraphy nib is the strongest result on the device sheet** — the tester added a descending curl on the reasoning that a nib must be proven in both directions, and thick-across/thin-along is exactly what came out. Device protocol run on **MIP11 with the real pen in a real hand**, which is the only way the pressure criterion is answerable at all: `docs/conformance/mip11-2026-08-08-phase3.md`, with both stroke sheets committed under `docs/conformance/images/`. |
-| 4 | Onyx adapter (BOOX) | ⬜ Not started | | | |
+| 4 | Onyx adapter (BOOX) | 🟡 In progress | `TBD` | 2026-08-08 | **The BOOX writes with firmware ink, and the two ink paths do not yet agree.** 302 JVM tests green (248 `:canvas`, 40 `:canvas-onyx`, 14 `:lab`); golden suite green; `:canvas-onyx` builds, installs and runs on the **NA5C**. Verified on that panel: hardware ink, full channel capture (2746 samples in one stroke, pressure 0.016–1.0 against `maxPressure=4095`, tilt raw at 5–39 / −6–1), erase with **no grey residue and no black flash**, exclusion zones proven **pixel-exact** (§5.16), and **R2 answered** (§10.5). **Not met: "committed content matches the firmware closely."** Both committed renderers were built and measured against the overlay, and neither agrees on all nine pens — ballpoint is close, fountain nearly, the rest visibly differ. That gap is the phase's open work, and the Lab now carries the instrument for it: a `Layer: SW ⇄ Neo` toggle on the Tools screen that **carries the drawn strokes across the switch**, so the same captured ink is redrawn by each renderer rather than being written twice. Also outstanding: the **G10 and G102 runs**, the `size` channel (declared but **all-zero** on the NA5C across 2746 samples — needs a second panel before deciding whether to stop claiming it), and the two-canvas handoff and palm-gate criteria. Seven things worth carrying forward, all recorded in §5.14–§5.19: the coordinate space is **view**, not screen, and getting it wrong fails **totally and silently**; `adb shell input stylus` **cannot drive the Onyx raw pipeline at all**, so this platform is hand-tested; the SDK's timestamps are on the **wall clock**, not `uptimeMillis`; `releaseLiveInk` and the pen-down re-arm are a **matched pair** and shipping one without the other kills live ink permanently; the firmware overlay **paints nothing for a translucent colour**; the overlay **owns the whole panel**, so host chrome cannot repaint until it is released — which is a library-level need, now `SproutCanvasView.releaseLiveInk()`; and the ink swap happens **when the EPD layer hands the panel back**, not at pen-up. Two harness defects found by the tester and fixed: the Lab's buttons showed no armed state, and the render mode silently reset on every reinstall — both of which quietly invalidate a comparison pass. |
 | 5 | Supernote adapter (Ratta) | ⬜ Not started | | | |
 | 6 | Conformance harness & regression | ⬜ Not started | | | |
 | 7 | Packaging, docs, release prep | ⬜ Not started | | | |
@@ -1239,8 +1338,9 @@ phase, not by preference.
 
 | # | Question | Answered by | Fallback |
 |---|---|---|---|
-| R2 | Does the Onyx firmware overlay honour **alpha** in live preview? If not, `HIGHLIGHTER` reads opaque while writing and only becomes translucent on commit. | Phase 4 device check | Report the limitation through `capabilities`; never hide it |
 | R3 | Does the Supernote firmware honour a per-stroke width fine enough to express our dp ladder, or is the EMR range coarse? | Phase 5 device tuning | Quantize the ladder to what the hardware actually resolves, and report it |
+| R4 | **Which committed renderer should a BOOX default to** — the library's own, or the SDK's `NeoPen` solvers? Neither matched the firmware overlay across all nine pens when measured. | Phase 4, by hand on the panel, using the Lab's `Layer` toggle | Ship the closer of the two, report the disagreement through `PenFidelity`, and keep the toggle |
+| R5 | Would rendering from the SDK's **solved geometry** close the gap R4 is about? `NeoPenRender.loadPenPointArrays()` / `loadPenPointSizeArrays()` and `computeStrokePoints(...)` return per-point positions and widths *after* the SDK's own pressure, velocity and smoothing curves — so re-solving would stop being a source of disagreement. There is **no way to read the overlay's pixels back** (§10.5), making this the closest thing the SDK offers. | Phase 4, as a third render mode | Stay with re-solving; record the residual gap honestly |
 
 ### 10.3 Resolved in Phase 1 (2026-08-07)
 
@@ -1260,6 +1360,13 @@ expensive to reverse once the adapters were written against them.
 |---|---|---|
 | R1 | Which tier hosts the golden-image suite — Robolectric or instrumented? | **Robolectric, in `NATIVE` graphics mode.** Measured rather than preferred: both tiers render the same 18 scenes, and on a Wacom Movink Pad 11 (API 34) **16 of 18 came back byte-identical** to the JVM, with the other two differing by **1 unit on one channel** across a few hundred anti-aliased pixels. Nothing about goldens needs hardware, so the instrumented tier buys only a cross-check — which it keeps providing, on demand, through `GoldenImageInstrumentedTest`. The measurement and what would overturn it are in `docs/golden-tier.md`. |
 | P5 | Does the erase gesture need a boundary in the engine SPI? | **Yes — `InkEngineHost.onEraseEnded()` was added.** One swipe of an eraser produces a stream of `onEraseAt` calls; without a boundary a host implementing undo gets five or ten entries for one user action, and a hardware engine has no moment at which one panel repaint is correct rather than one per move event. |
+
+### 10.5 Resolved in Phase 4 (2026-08-08)
+
+| # | Question | Resolution |
+|---|---|---|
+| R2 | Does the Onyx firmware overlay honour **alpha** in live preview? | **No — and worse than the failure that was anticipated.** The plan expected the alpha to be ignored, so a highlighter would read solid while writing and turn translucent on commit. Measured on a NoteAir5C, the overlay paints **nothing at all** for a translucent colour: the pen moves, no ink appears, no error anywhere, and the whole stroke arrives at once when the panel is handed back. Confirmed to be the alpha rather than the width, since a highlighter at 0.5 dp is equally invisible. The adapter now forces the *preview* opaque while the committed stroke keeps its translucency, reported through the new `CanvasCapabilities.livePreviewSupportsAlpha`. **`HIGHLIGHTER` stays `EMULATED` rather than dropping to `APPROXIMATE`**, and that too was measured: on a Kaleido panel the forced-opaque band still reads as a true highlight, with ink visible underneath throughout and no visible change when the panel is released. *A mono panel renders that band as flat grey and may well cover the ink beneath it — so this may yet need to vary by panel rather than by vendor.* |
+| — | Can the SDK hand back **what the EPD overlay is displaying**, so the committed layer could reproduce it exactly? | **No, and the reason is architectural rather than an oversight.** `EpdController` only ever pushes to the panel (`refreshScreen`, `refreshScreenRegion`, `handwritingRepaint`); every `Bitmap`-returning method in the pen and API packages is a scratch allocator, a texture source, or unrelated; and `RawInputCallback` returns points, never pixels. `setStrokeStyle` is a pass-through to a **reflected hidden framework method**, so the overlay is rendered by firmware inside the EPD controller and those pixels never exist in the app's process. `screencap` cannot see them either, for the same reason — that limitation and this one are the same fact seen from two sides. The closest thing the SDK offers is *solved geometry* rather than pixels, which is what R5 is about. |
 
 ---
 

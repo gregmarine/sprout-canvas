@@ -29,6 +29,7 @@
     <!-- Tools screen -->
     <string name="tools_status">tool: %1$s · %2$s · %3$s</string>
     <string name="tools_fidelity">fidelity on %1$s: %2$s</string>
+    <string name="tools_committed_layer">committed layer: %1$s</string>
     <string name="tools_traits">pressure-sensitive: %1$s · translucent: %2$s · engine alpha: %3$s</string>
     <string name="tool_eraser">Eraser</string>
 
@@ -53,4 +54,6 @@
     <string name="action_clear">Clear</string>
     <string name="action_eraser">Eraser</string>
     <string name="action_refresh">Refresh</string>
+    <string name="action_committed_layer">Layer</string>
+    <string name="action_committed_layer_mode">Layer: %1$s</string>
 </resources>

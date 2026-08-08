@@ -1,6 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
+    <!--
+        tools:replace on allowBackup is required by :canvas-onyx, not by this app. The Onyx SDK's
+        AAR declares android:allowBackup="true" in its own manifest, so any consuming app that has
+        an opinion about backup fails the manifest merge until it says which value wins. Worth
+        knowing before it looks like a bug in the Lab: the error names this file, and the cause is
+        a dependency two modules away.
+    -->
     <application
         android:name=".LabApp"
         android:allowBackup="false"
@@ -8,7 +16,8 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.SproutCanvasLab">
+        android:theme="@style/Theme.SproutCanvasLab"
+        tools:replace="android:allowBackup">
 
         <!--
             The launcher entry. The device tooling starts this component by name, so renaming it

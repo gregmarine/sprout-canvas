@@ -15,6 +15,27 @@ android {
         versionName = "0.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        ndk {
+            // Every device this Lab is installed on — BOOX, Supernote, Wacom Movink, S26U — is
+            // 64-bit ARM. Shipping only arm64-v8a drops three unused ABIs' worth of Onyx native
+            // libraries, including the one 4 KB-aligned library that fails Play's 16 KB page-size
+            // check. A consuming app that uses :canvas-onyx wants this too (PLAN.md §5.7).
+            abiFilters += "arm64-v8a"
+        }
+    }
+
+    packaging {
+        jniLibs {
+            // The Onyx SDK ships its own libc++_shared.so, which collides with any other
+            // dependency that bundles one. Packaging fails outright without this (PLAN.md §5.7).
+            pickFirsts += setOf(
+                "lib/arm64-v8a/libc++_shared.so",
+                "lib/armeabi-v7a/libc++_shared.so",
+                "lib/x86/libc++_shared.so",
+                "lib/x86_64/libc++_shared.so",
+            )
+        }
     }
 
     buildTypes {
@@ -47,6 +68,12 @@ kotlin {
 
 dependencies {
     implementation(project(":canvas"))
+
+    // The BOOX adapter. Opt-in by decision (D1) — the Lab opts in because it is the conformance
+    // harness for every platform. A phone-only app simply omits this line and never inherits the
+    // Onyx SDK's native libraries or the insecure BOOX maven repo.
+    implementation(project(":canvas-onyx"))
+
     implementation(libs.androidx.appcompat)
 
     testImplementation(libs.junit)

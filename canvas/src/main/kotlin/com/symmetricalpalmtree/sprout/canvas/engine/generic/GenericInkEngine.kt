@@ -14,6 +14,7 @@ import com.symmetricalpalmtree.sprout.canvas.engine.EngineInfo
 import com.symmetricalpalmtree.sprout.canvas.engine.InkEngine
 import com.symmetricalpalmtree.sprout.canvas.engine.InkEngineFactory
 import com.symmetricalpalmtree.sprout.canvas.engine.InkEngineHost
+import com.symmetricalpalmtree.sprout.canvas.engine.PenActivityGate
 import com.symmetricalpalmtree.sprout.canvas.engine.RepaintReason
 import com.symmetricalpalmtree.sprout.canvas.model.DeviceCalibration
 import com.symmetricalpalmtree.sprout.canvas.model.EraserMode

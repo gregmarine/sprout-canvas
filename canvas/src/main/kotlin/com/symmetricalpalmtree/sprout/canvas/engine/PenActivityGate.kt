@@ -1,8 +1,9 @@
-package com.symmetricalpalmtree.sprout.canvas.engine.generic
+package com.symmetricalpalmtree.sprout.canvas.engine
 
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import androidx.annotation.RestrictTo
 
 /**
  * True while the stylus is on the glass, plus a tail after it lifts.
@@ -28,10 +29,19 @@ import android.os.SystemClock
  * since in modes where raw drawing is disabled the SDK goes silent and the stylus arrives as an
  * ordinary event.
  *
+ * ### Why it lives here rather than in `engine.generic`
+ *
+ * It started as the software engine's gate and became shared the moment a hardware engine existed:
+ * the Onyx adapter needs exactly this behaviour, exactly this tail, driven from two sources instead
+ * of one. Adapters are separate Gradle modules, so `internal` cannot reach them — and a second copy
+ * of a 350 ms constant chosen to sit just outside the platform double-tap window is a copy that
+ * will eventually disagree with the first. Restricted to the library group, not published to hosts.
+ *
  * @param onChanged fired on every transition, on the main thread. Never fired for a repeat of the
  *   state already reported.
  */
-internal class PenActivityGate(private val onChanged: (Boolean) -> Unit) {
+@RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+public class PenActivityGate(private val onChanged: (Boolean) -> Unit) {
 
     private val handler = Handler(Looper.getMainLooper())
 
@@ -43,11 +53,11 @@ internal class PenActivityGate(private val onChanged: (Boolean) -> Unit) {
     private val expire = Runnable { publish() }
 
     /** True while the stylus is down, and for [TAIL_MS] after it lifts. */
-    val isActive: Boolean
+    public val isActive: Boolean
         get() = penDown || (hasLifted && SystemClock.uptimeMillis() - lastLiftMs < TAIL_MS)
 
     /** The stylus touched down. */
-    fun onPenDown() {
+    public fun onPenDown() {
         handler.removeCallbacks(expire)
         penDown = true
         publish()
@@ -59,7 +69,7 @@ internal class PenActivityGate(private val onChanged: (Boolean) -> Unit) {
      * The gate stays open for the tail, so the transition to `false` is posted rather than reported
      * now.
      */
-    fun onPenUp() {
+    public fun onPenUp() {
         penDown = false
         hasLifted = true
         lastLiftMs = SystemClock.uptimeMillis()
@@ -71,7 +81,7 @@ internal class PenActivityGate(private val onChanged: (Boolean) -> Unit) {
     }
 
     /** Closes the gate immediately, without a tail. For detach and teardown. */
-    fun reset() {
+    public fun reset() {
         handler.removeCallbacks(expire)
         penDown = false
         hasLifted = false
@@ -85,8 +95,8 @@ internal class PenActivityGate(private val onChanged: (Boolean) -> Unit) {
         onChanged(active)
     }
 
-    companion object {
+    public companion object {
         /** 350 ms — longer than the platform double-tap window. See the class KDoc. */
-        const val TAIL_MS: Long = 350L
+        public const val TAIL_MS: Long = 350L
     }
 }

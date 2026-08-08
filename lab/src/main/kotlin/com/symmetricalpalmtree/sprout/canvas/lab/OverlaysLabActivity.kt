@@ -28,9 +28,12 @@ import com.symmetricalpalmtree.sprout.canvas.model.InkStroke
  * On a BOOX in Phase 4 the same screen answers a harder question, since there the exclusion is
  * enforced by the panel's own hardware limit rect rather than by our capture code.
  */
-class OverlaysLabActivity : AppCompatActivity() {
+class OverlaysLabActivity : InkLabActivity() {
 
     private lateinit var canvas: SproutCanvasView
+
+    override val inkCanvas: SproutCanvasView?
+        get() = if (::canvas.isInitialized) canvas else null
     private lateinit var status: TextView
 
     private val overlays = mutableListOf<View>()

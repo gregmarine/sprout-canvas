@@ -61,6 +61,25 @@ public class CanvasCapabilities(
     public val liveInkIsHardware: Boolean = false,
 
     /**
+     * Whether the **live** stroke shows a translucent colour while the pen is on the glass.
+     *
+     * Distinct from [supportsAlpha], which describes the ink that ends up on the canvas. On an
+     * engine whose live ink is painted by firmware these are two different pieces of hardware
+     * answering two different questions, and on BOOX they disagree: the committed stroke honours
+     * alpha exactly, and the firmware overlay — measured on a NoteAir5C — paints **nothing at all**
+     * for a translucent colour. Not a solid stroke, not a wrong colour; no ink, no error.
+     *
+     * Where that is false the adapter forces the live preview opaque, so a highlighter writes as a
+     * solid band that settles to translucent on pen-up. That is the best behaviour available and it
+     * is still a visible disagreement between what the user writes and what they end up with, which
+     * is why it is published rather than smoothed over. A host can use it to explain the effect, or
+     * to prefer an opaque tool while writing.
+     *
+     * `true` on any engine that draws its own live ink, where one renderer serves both paths.
+     */
+    public val livePreviewSupportsAlpha: Boolean = true,
+
+    /**
      * Live-preview colour floor, `0` when there is none.
      *
      * On Onyx Kaleido panels the firmware overlay paints a colour as **black** once its dominant
@@ -113,6 +132,7 @@ public class CanvasCapabilities(
         appendLine("engine:            $engineId")
         appendLine("channels:          ${InkChannel.describe(channels)}")
         appendLine("alpha:             $supportsAlpha")
+        appendLine("alpha (live):      $livePreviewSupportsAlpha")
         appendLine("live ink:          ${if (liveInkIsHardware) "hardware overlay" else "software"}")
         appendLine("colour floor:      ${if (livePreviewColorFloor == 0) "none" else "$livePreviewColorFloor (live preview)"}")
         appendLine("eraser modes:      ${supportedEraserModes.joinToString()}")

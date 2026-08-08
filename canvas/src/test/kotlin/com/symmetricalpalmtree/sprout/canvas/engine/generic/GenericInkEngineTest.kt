@@ -11,6 +11,7 @@ import android.view.InputDevice
 import android.view.MotionEvent
 import android.view.View
 import com.symmetricalpalmtree.sprout.canvas.engine.InkEngineHost
+import com.symmetricalpalmtree.sprout.canvas.engine.PenActivityGate
 import com.symmetricalpalmtree.sprout.canvas.model.EraserMode
 import com.symmetricalpalmtree.sprout.canvas.model.EraserSpec
 import com.symmetricalpalmtree.sprout.canvas.model.SproutPen

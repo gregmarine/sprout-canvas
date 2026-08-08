@@ -1,6 +1,7 @@
 package com.symmetricalpalmtree.sprout.canvas.lab
 
 import android.os.Bundle
+import android.os.SystemClock
 import android.view.InputDevice
 import android.view.MotionEvent
 import android.widget.Button
@@ -11,6 +12,9 @@ import com.symmetricalpalmtree.sprout.canvas.SproutCanvasListener
 import com.symmetricalpalmtree.sprout.canvas.SproutCanvasView
 import com.symmetricalpalmtree.sprout.canvas.model.InkChannel
 import com.symmetricalpalmtree.sprout.canvas.model.InkStroke
+import com.symmetricalpalmtree.sprout.canvas.onyx.OnyxDiagnostics
+import com.symmetricalpalmtree.sprout.canvas.onyx.OnyxRenderMode
+import kotlin.math.abs
 
 /**
  * The Device report: what the library chose, what it measured, and what the hardware actually sent.
@@ -29,9 +33,12 @@ import com.symmetricalpalmtree.sprout.canvas.model.InkStroke
  * side by side. A pressure channel that declares `0..4096` and only ever reports `0` is a channel
  * that is present, useless, and otherwise completely invisible.
  */
-class DeviceReportActivity : AppCompatActivity() {
+class DeviceReportActivity : InkLabActivity() {
 
     private lateinit var canvas: SproutCanvasView
+
+    override val inkCanvas: SproutCanvasView?
+        get() = if (::canvas.isInitialized) canvas else null
     private lateinit var report: TextView
 
     private val observed = ObservedRanges()
@@ -59,6 +66,22 @@ class DeviceReportActivity : AppCompatActivity() {
             refresh()
         }
         findViewById<Button>(R.id.refreshButton).setOnClickListener { refresh() }
+
+        // Switching the committed-layer renderer recreates the Activity rather than reaching into
+        // the live canvas. A canvas reads the mode when its engine attaches, and adding a second
+        // way to change it afterwards would be a second thing to keep correct for no benefit — the
+        // comparison this button exists for is "draw the same handwriting through each", not
+        // "change it mid-stroke".
+        findViewById<Button>(R.id.renderModeButton).setOnClickListener {
+            LabSettings.setRenderMode(
+                this,
+                when (OnyxRenderMode.current) {
+                    OnyxRenderMode.Mode.SOFTWARE -> OnyxRenderMode.Mode.NEO_PEN
+                    OnyxRenderMode.Mode.NEO_PEN -> OnyxRenderMode.Mode.SOFTWARE
+                },
+            )
+            recreate()
+        }
     }
 
     override fun onResume() {
@@ -93,12 +116,31 @@ class DeviceReportActivity : AppCompatActivity() {
             appendLine("name:              ${canvas.engineInfo.displayName}")
             append(canvas.capabilities.describe())
             appendLine()
+            appendLine("── onyx adapter ────────────────────")
+            append(OnyxDiagnostics.describe())
+            appendLine("canvas on screen:  ${canvasScreenOffset()}")
+            appendLine()
             appendLine("── digitizer (declared) ────────────")
             append(declaredStylusRanges())
             appendLine()
             appendLine("── observed over $strokesSeen stroke(s) ─────")
             append(observed.describe())
         }
+    }
+
+    /**
+     * Where the canvas sits on the panel.
+     *
+     * Not decoration. The hardware ink pipeline sits below the view system, and whether it speaks
+     * screen or view coordinates only *matters* when those two disagree — which is exactly when
+     * this is not `0, 0`. A coordinate-space line in the section above that says "assumed" alongside
+     * an offset of `0, 0` means the question could not arise; the same line beside a real offset
+     * means it was answered.
+     */
+    private fun canvasScreenOffset(): String {
+        val location = IntArray(2)
+        canvas.getLocationOnScreen(location)
+        return "${location[0]}, ${location[1]} (${canvas.width} × ${canvas.height} px)"
     }
 
     /**
@@ -147,6 +189,16 @@ class DeviceReportActivity : AppCompatActivity() {
 
         /** Wide enough for the longest axis label, so the columns line up. */
         const val LABEL_WIDTH = 17
+
+        /**
+         * How stale the last sample may be and still identify its clock.
+         *
+         * Generous on purpose: the report is refreshed by hand, possibly a while after the stroke
+         * that filled it in. The two candidate clocks differ by the device's uptime — minutes at
+         * best and usually far more — so a wide window costs nothing, while a narrow one would
+         * report "neither clock" for a tester who took their time.
+         */
+        const val CLOCK_TOLERANCE_MS = 60_000L
     }
 
     /** Min and max of every channel actually seen in captured ink. */
@@ -157,11 +209,15 @@ class DeviceReportActivity : AppCompatActivity() {
         private var channels = InkChannel.NONE
         private var samples = 0L
 
+        /** The newest raw timestamp seen, which is what identifies the clock it is on. */
+        private var lastTimestampMs: Long? = null
+
         fun reset() {
             minimum.clear()
             maximum.clear()
             channels = InkChannel.NONE
             samples = 0L
+            lastTimestampMs = null
         }
 
         fun record(stroke: InkStroke) {
@@ -174,6 +230,7 @@ class DeviceReportActivity : AppCompatActivity() {
             track("orientation", s.orientation, s.count)
             track("altitude", s.altitude, s.count)
             track("size", s.size, s.count)
+            s.timestampMs?.let { if (s.count > 0) lastTimestampMs = it[s.count - 1] }
         }
 
         private fun track(name: String, values: FloatArray?, count: Int) {
@@ -188,6 +245,7 @@ class DeviceReportActivity : AppCompatActivity() {
         fun describe(): String = buildString {
             appendLine("channels seen:     ${InkChannel.describe(channels)}")
             appendLine("samples:           $samples")
+            appendLine("timestamp clock:   ${timestampClock()}")
             if (minimum.isEmpty()) {
                 appendLine("draw on the canvas below to fill this in")
                 return@buildString
@@ -199,5 +257,30 @@ class DeviceReportActivity : AppCompatActivity() {
                 )
             }
         }
+
+        /**
+         * Which clock the captured timestamps are on, worked out by comparing them to both.
+         *
+         * [com.symmetricalpalmtree.sprout.canvas.model.StrokeSamples.timestampMs] is documented as
+         * `SystemClock.uptimeMillis`, which is true by construction on the generic engine — it reads
+         * `MotionEvent.getEventTime`. A vendor pipeline hands back a `timestamp` field with no
+         * documented clock at all, and the difference is not cosmetic: uptime and wall clock are
+         * hours or years apart, and a host computing stroke duration or replay timing from the
+         * wrong one gets an answer that is wrong by that much.
+         *
+         * Nothing in an API can answer this. Two subtractions can.
+         */
+        private fun timestampClock(): String {
+            val last = lastTimestampMs ?: return "no timestamps captured yet"
+            val uptimeDelta = abs(SystemClock.uptimeMillis() - last)
+            val wallDelta = abs(System.currentTimeMillis() - last)
+            return when {
+                uptimeDelta < CLOCK_TOLERANCE_MS -> "uptimeMillis (as documented) — Δ ${uptimeDelta} ms"
+                wallDelta < CLOCK_TOLERANCE_MS ->
+                    "⚠ currentTimeMillis, NOT uptimeMillis — Δ ${wallDelta} ms"
+                else -> "⚠ neither clock — uptime Δ $uptimeDelta ms, wall Δ $wallDelta ms"
+            }
+        }
     }
+
 }

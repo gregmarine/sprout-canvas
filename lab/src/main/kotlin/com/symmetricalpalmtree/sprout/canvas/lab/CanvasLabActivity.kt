@@ -35,9 +35,12 @@ import kotlin.math.sin
  * - **G4, in two taps.** Ingest a known set of strokes, hand them straight back, and see whether
  *   anything moved.
  */
-class CanvasLabActivity : AppCompatActivity() {
+class CanvasLabActivity : InkLabActivity() {
 
     private lateinit var canvas: SproutCanvasView
+
+    override val inkCanvas: SproutCanvasView?
+        get() = if (::canvas.isInitialized) canvas else null
     private lateinit var container: FrameLayout
     private lateinit var status: TextView
 

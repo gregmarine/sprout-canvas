@@ -88,8 +88,28 @@ public class StrokeRendererRegistry {
     private val renderers = HashMap<SproutPen, StrokeRenderer>(SproutPen.entries.size)
 
     init {
-        // Built per instance, deliberately: every renderer holds reusable solver buffers, and
-        // sharing those across canvases would mean two views solving into the same arrays.
+        reset()
+    }
+
+    /** The renderer for [pen]. Never null, for any pen. */
+    public fun rendererFor(pen: SproutPen): StrokeRenderer = renderers.getValue(pen)
+
+    /** Replaces the renderer for [pen] — for a vendor adapter matching its own firmware's ink. */
+    public fun setRenderer(pen: SproutPen, renderer: StrokeRenderer) {
+        renderers[pen] = renderer
+    }
+
+    /**
+     * Restores the library's own renderer for every pen, discarding any override.
+     *
+     * Called whenever a canvas's engine changes. Withdrawing an override matters as much as
+     * installing one: forcing a BOOX onto the generic engine is how the harness compares the
+     * hardware and software ink paths, and a table still holding the vendor's renderers would make
+     * that comparison meaningless.
+     */
+    public fun reset() {
+        // Rebuilt per call, deliberately: every renderer holds reusable solver buffers, and sharing
+        // those across canvases would mean two views solving into the same arrays.
         val evenWidth = EvenWidthRenderer()
         val ribbon = RibbonRenderer()
         val texture = TextureRenderer()
@@ -117,14 +137,6 @@ public class StrokeRendererRegistry {
                 SproutPen.CALLIGRAPHY -> calligraphy
             }
         }
-    }
-
-    /** The renderer for [pen]. Never null, for any pen. */
-    public fun rendererFor(pen: SproutPen): StrokeRenderer = renderers.getValue(pen)
-
-    /** Replaces the renderer for [pen] — for a vendor adapter matching its own firmware's ink. */
-    public fun setRenderer(pen: SproutPen, renderer: StrokeRenderer) {
-        renderers[pen] = renderer
     }
 }
 

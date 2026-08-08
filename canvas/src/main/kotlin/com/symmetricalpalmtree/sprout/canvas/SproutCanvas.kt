@@ -4,6 +4,8 @@ import android.app.Application
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import androidx.annotation.MainThread
+import androidx.annotation.RestrictTo
+import androidx.annotation.VisibleForTesting
 import com.symmetricalpalmtree.sprout.canvas.engine.EngineRegistry
 import com.symmetricalpalmtree.sprout.canvas.engine.InkEngineFactory
 
@@ -143,8 +145,18 @@ public object SproutCanvas {
 
     private var uninitializedWarningLogged = false
 
-    /** Restores the pristine state. Tests only. */
-    internal fun resetForTesting() {
+    /**
+     * Restores the pristine state. Tests only.
+     *
+     * Reachable from the adapter modules rather than `internal` to this one, because the behaviour
+     * that most needs testing is what an adapter does when this object was **never** initialized —
+     * and an adapter is a separate Gradle module, so its tests cannot get back to an uninitialized
+     * state any other way. Restricted to the library group; a host app touching it gets a lint
+     * error.
+     */
+    @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+    @VisibleForTesting
+    public fun resetForTesting() {
         application = null
         debugLogging = false
         strictMode = false

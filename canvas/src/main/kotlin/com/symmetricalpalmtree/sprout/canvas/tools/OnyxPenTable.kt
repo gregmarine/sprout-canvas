@@ -150,11 +150,27 @@ public object OnyxPenTable {
      *
      * Two pens are below native, for two different reasons:
      *
-     *  - **[SproutPen.HIGHLIGHTER]** — there is no highlighter style; it is [SproutPen.MARKER]
-     *    widened and given alpha. *(Whether the firmware overlay honours alpha in **live preview**
-     *    is an open device question for Phase 4. If it does not, the live stroke reads opaque and
-     *    only becomes translucent on commit — which must be surfaced through capabilities, not
-     *    hidden.)*
+     *  - **[SproutPen.HIGHLIGHTER]** — there is no highlighter style to arm; it is
+     *    [SproutPen.MARKER] widened and given alpha.
+     *
+     *    The open question was whether the firmware overlay would honour that alpha in live
+     *    preview, and the NoteAir5C answered it in two parts. First: **the overlay paints nothing
+     *    at all for a translucent colour.** Not a solid stroke, not a wrong colour; the pen moves
+     *    and no ink appears, with no error anywhere. It is the alpha and not the width — a
+     *    highlighter at 0.5 dp is equally invisible. So the adapter forces the *preview* opaque
+     *    while the committed stroke keeps its translucency
+     *    ([com.symmetricalpalmtree.sprout.canvas.engine.CanvasCapabilities.livePreviewSupportsAlpha]).
+     *
+     *    Second, and the reason this stayed `EMULATED` rather than dropping to
+     *    [PenFidelity.APPROXIMATE]: on the Kaleido panel that forced-opaque band **still reads as a
+     *    true highlight**. Ink underneath stays visible the whole time the pen is down, and pen-up
+     *    produces no visible change at all. The disagreement the compensation should have created
+     *    does not appear, so reporting one would be the inaccuracy.
+     *
+     *    *Measured on a colour panel. A mono panel renders that same band as flat grey and may well
+     *    cover the ink beneath it, which would make this `APPROXIMATE` there — so this is a fidelity
+     *    that may yet need to vary by panel rather than by vendor.*
+     *
      *  - **[SproutPen.DASHED]** — the firmware dashes live ink but the SDK has no dashed software
      *    pen, so the committed stroke is ours. The lower of the two paths is what gets reported.
      */

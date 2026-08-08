@@ -22,15 +22,17 @@ canvas.listener = object : SproutCanvasListener {
 
 ## Status
 
-🚧 **Early development.** The public API exists and is documented as of Phase 1, but **nothing draws
-yet** — the engines arrive in Phases 2–5. Not published to a public registry.
+🚧 **Early development.** As of Phase 2 the canvas **draws**: full stylus capture and all nine
+software pens work on any Android stylus tablet. The vendor hardware paths arrive in Phases 4–5, and
+until then a BOOX or a Supernote runs the same software engine as a phone. Not published to a public
+registry.
 
 | Phase | | Status |
 |---:|---|---|
 | 0 | Foundation & build scaffolding | ✅ Complete |
 | 1 | Core model & public API contract | ✅ Complete |
-| 2 | Generic engine: capture and render | ⬜ Not started |
-| 3 | Tooling & rendering fidelity | ⬜ Not started |
+| 2 | Generic engine: capture and render | ✅ Complete |
+| 3 | Tooling & rendering fidelity | 🟡 Mostly delivered in Phase 2 |
 | 4 | Onyx adapter (BOOX) | ⬜ Not started |
 | 5 | Supernote adapter (Ratta) | ⬜ Not started |
 | 6 | Conformance harness & regression | ⬜ Not started |
@@ -143,10 +145,11 @@ If your default `java` is newer, either prefix these commands with `JAVA_HOME=<p
 set `org.gradle.java.home` in your own `~/.gradle/gradle.properties`.
 
 ```sh
-./gradlew build test          # compile + JVM tests (JUnit 4 + Robolectric)
-./gradlew goldenTest          # golden-image render regression, on demand
-./gradlew publishToMavenLocal # publish :canvas locally
-./gradlew :lab:installDebug   # install Sprout Canvas Lab on a connected device
+./gradlew build test                         # compile + JVM tests (JUnit 4 + Robolectric)
+./gradlew goldenTest                         # golden-image render regression, on demand
+./gradlew :canvas:connectedDebugAndroidTest  # stylus-injection suite, on a connected device
+./gradlew publishToMavenLocal                # publish :canvas locally
+./gradlew :lab:installDebug                  # install Sprout Canvas Lab on a connected device
 ```
 
 **Sprout Canvas Lab** (`:lab`) is the conformance harness — a real installable app that exercises

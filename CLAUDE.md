@@ -58,7 +58,7 @@ These apply everywhere. They are not repeated in the plan's phase sections.
   that runs Gradle. Prefix commands with
   `JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home`, or set
   `org.gradle.java.home` in `~/.gradle/gradle.properties` (machine-local, uncommitted). See
-  PLAN.md §5.10.
+  PLAN.md §5.12.
 - **`:canvas` has exactly one dependency: `androidx.annotation`**, on the `api` configuration
   because its annotations appear on the public surface. No coroutines, no serialization, no
   Material, no Compose, **no `androidx.lifecycle`**. A drawing library must not dictate a host app's
@@ -101,15 +101,23 @@ Prefix every command with `JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-1
 unless the shell's default `java` is already 17 — see the JDK note above.
 
 ```sh
-./gradlew build test           # compile + JVM tests (JUnit 4 + Robolectric)
-./gradlew goldenTest           # golden-image render regression — on demand, NOT part of `check`
-./gradlew publishToMavenLocal  # publish :canvas locally (no public registry — D7)
-./gradlew :lab:installDebug    # install Sprout Canvas Lab
+./gradlew build test                         # compile + JVM tests (JUnit 4 + Robolectric)
+./gradlew goldenTest                         # golden-image regression — on demand, NOT part of `check`
+./gradlew goldenTest -Psprout.golden.regenerate=true   # accept the current rendering, then review the diff
+./gradlew :canvas:connectedDebugAndroidTest  # stylus-injection suite, needs a device
+./gradlew publishToMavenLocal                # publish :canvas locally (no public registry — D7)
+./gradlew :lab:installDebug                  # install Sprout Canvas Lab
 ```
 
 **Why `goldenTest` is separate:** geometry assertions run on every build; pixel comparison is run on
 demand and before releases, so routine builds are never gated on rendering variance (PLAN.md D13,
-§4.1.1).
+§4.1.1). It runs on **Robolectric with `NATIVE` graphics** — settled by measurement in Phase 2, see
+`docs/golden-tier.md`. Any pixel test needs `@GraphicsMode(NATIVE)`; Robolectric's default mode
+records draw calls without executing them, so the test would pass forever while asserting nothing.
+
+**Scripting a device session:** `adb shell input stylus swipe x1 y1 x2 y2 ms` produces genuine
+`TOOL_TYPE_STYLUS` events, so most of a device protocol can be automated. Those events come from a
+virtual device that declares no motion axes, so anything pressure-driven still needs the real pen.
 
 Device builds, install, serials, and the BOOX enable-after-sideload step: see the
 `device-build-install` skill (`.claude/skills/device-build-install/SKILL.md`) — invoked

@@ -6,6 +6,7 @@ import android.graphics.Point
 import android.graphics.PointF
 import android.graphics.Rect
 import android.os.Looper
+import android.os.SystemClock
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
@@ -18,6 +19,7 @@ import com.symmetricalpalmtree.sprout.canvas.engine.InkEngineHost
 import com.symmetricalpalmtree.sprout.canvas.engine.RepaintReason
 import com.symmetricalpalmtree.sprout.canvas.geometry.CanvasGeometry
 import com.symmetricalpalmtree.sprout.canvas.geometry.ExclusionZoneTracker
+import com.symmetricalpalmtree.sprout.canvas.geometry.StrokeHitTest
 import com.symmetricalpalmtree.sprout.canvas.model.CaptureInfo
 import com.symmetricalpalmtree.sprout.canvas.model.EraserSpec
 import com.symmetricalpalmtree.sprout.canvas.model.InkStroke
@@ -25,6 +27,9 @@ import com.symmetricalpalmtree.sprout.canvas.model.SproutPen
 import com.symmetricalpalmtree.sprout.canvas.model.StrokeSamples
 import com.symmetricalpalmtree.sprout.canvas.model.StrokeSeed
 import com.symmetricalpalmtree.sprout.canvas.model.ToolSpec
+import com.symmetricalpalmtree.sprout.canvas.render.CommittedLayer
+import com.symmetricalpalmtree.sprout.canvas.render.RenderContext
+import com.symmetricalpalmtree.sprout.canvas.render.StrokeRendererRegistry
 
 /**
  * A stylus drawing surface that captures everything the hardware reports.
@@ -83,6 +88,27 @@ public class SproutCanvasView @JvmOverloads constructor(
     private var boundsRearmDeferred = false
     private var zonesRearmDeferred = false
     private var engineSelectionAnnounced = false
+
+    /** This canvas's renderers. Per-instance — see [StrokeRendererRegistry]. */
+    private val renderers = StrokeRendererRegistry()
+
+    private var renderContext = RenderContext(context.resources.displayMetrics.density)
+
+    private val committed = CommittedLayer { canvas -> drawCommittedContent(canvas) }
+
+    /** Set whenever committed content changed; consumed by the next [onDraw]. */
+    private var committedDirty = true
+
+    /** Strokes removed by the erase gesture in progress, reported to the host when it ends. */
+    private val eraseGestureRemoved = LinkedHashMap<String, InkStroke>()
+    private var eraseRepaintPending = false
+    private var lastEraseRepaintMs = 0L
+    private val eraseRepaintTick = Runnable {
+        eraseRepaintPending = false
+        lastEraseRepaintMs = SystemClock.uptimeMillis()
+        committedDirty = true
+        invalidate()
+    }
 
     /** The host app's listener. Null by default; assigning replaces any previous one. */
     public var listener: SproutCanvasListener? = null
@@ -365,6 +391,8 @@ public class SproutCanvasView @JvmOverloads constructor(
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
+        renderContext = RenderContext(resources.displayMetrics.density)
+        committedDirty = true
         engine.attach(this)
         exclusionTracker.reattachListeners()
         engine.setTool(toolField)
@@ -377,8 +405,14 @@ public class SproutCanvasView @JvmOverloads constructor(
 
     override fun onDetachedFromWindow() {
         exclusionTracker.releaseListeners()
+        removeCallbacks(eraseRepaintTick)
+        eraseRepaintPending = false
         engine.pause()
         engine.detach()
+        // The display list is GPU-side memory belonging to a window this view has left. Content is
+        // untouched — the strokes are still here, and the node is re-recorded on the next draw.
+        committed.discard()
+        committedDirty = true
         super.onDetachedFromWindow()
     }
 
@@ -392,6 +426,10 @@ public class SproutCanvasView @JvmOverloads constructor(
         super.onSizeChanged(w, h, oldw, oldh)
         pushBounds(force = false)
         pushExclusionZones(force = false)
+        // The display list is sized to the view, so a resize invalidates it even though not one
+        // stroke changed. Content survives (G8) because the strokes are the source of truth and the
+        // node is only ever a cache of them.
+        committedDirty = true
         engine.onCommittedContentChanged(RepaintReason.BOUNDS_CHANGED)
     }
 
@@ -403,17 +441,69 @@ public class SproutCanvasView @JvmOverloads constructor(
         }
     }
 
+    /**
+     * Hands the event to the engine, and holds the gesture against a scrolling parent.
+     *
+     * ### Why the parent has to be told
+     *
+     * A canvas is a component, and hosts put components inside `ScrollView`s and pagers. Those
+     * parents watch a gesture and, once it has moved far enough, take it over — the child gets an
+     * `ACTION_CANCEL` and the page scrolls instead. For a drawing surface that means a stroke is
+     * lost the moment it goes more than a few pixels vertically, which is most strokes.
+     *
+     * So a gesture the engine actually consumed is claimed for the duration. It is claimed *only*
+     * then: the engine consumes stylus input and ignores fingers, so a finger swipe across the
+     * canvas still scrolls the page it sits in. Pen draws, finger scrolls — which is what a person
+     * holding a stylus expects, and it needs no cooperation from the host to get right.
+     */
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        if (engine.onTouchEvent(event)) return true
+        if (engine.onTouchEvent(event)) {
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN,
+                MotionEvent.ACTION_POINTER_DOWN,
+                -> parent?.requestDisallowInterceptTouchEvent(true)
+
+                MotionEvent.ACTION_UP,
+                MotionEvent.ACTION_POINTER_UP,
+                MotionEvent.ACTION_CANCEL,
+                -> parent?.requestDisallowInterceptTouchEvent(false)
+            }
+            return true
+        }
         return super.onTouchEvent(event)
     }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        // Committed content is rendered here from Phase 2: a hardware RenderNode blit with a
-        // mandatory software fallback branch, because Onyx's handwritingRepaint re-draws the view
-        // through a *software* canvas and a RenderNode cannot be drawn onto one (PLAN.md §3.8).
+        // Recording is deferred to draw time so that several content changes in one frame — an
+        // ingest followed by a clear, a burst of erase hits — cost one recording rather than one
+        // each. During active writing nothing is re-recorded at all: only the live layer changes.
+        if (committedDirty) {
+            committed.record(width, height)
+            committedDirty = false
+        }
+        committed.draw(canvas)
+        // A no-op on engines whose firmware already painted the stroke. Drawing over hardware ink
+        // produces a doubled, trailing stroke that feels broken (PLAN.md G2).
         engine.drawLiveInk(canvas)
+    }
+
+    /**
+     * Draws every committed stroke.
+     *
+     * Used both to record the display list and as the software fallback, so the two can never
+     * disagree — see [CommittedLayer].
+     *
+     * Nothing is painted behind the strokes. The canvas is transparent by design: a host sets its
+     * own background, and a library that filled white would paint over whatever the app put behind
+     * it (PLAN.md §1.3 — surfaces and templates belong to the host).
+     */
+    private fun drawCommittedContent(canvas: Canvas) {
+        for (stroke in strokesById.values) {
+            if (stroke.isEmpty) continue
+            renderers.rendererFor(stroke.tool.pen)
+                .draw(canvas, stroke.samples, stroke.tool, stroke.id.hashCode(), renderContext)
+        }
     }
 
     // ---------------------------------------------------------------------------------------
@@ -541,9 +631,34 @@ public class SproutCanvasView @JvmOverloads constructor(
     }
 
     private fun onCommittedContentChanged(reason: RepaintReason) {
+        committedDirty = true
         engine.onCommittedContentChanged(reason)
         invalidate()
     }
+
+    /**
+     * Repaints during an erase gesture at most once per [ERASE_REPAINT_INTERVAL_MS].
+     *
+     * Erase hits arrive as fast as the digitizer reports, and each one would otherwise re-record
+     * every stroke on the canvas. The first hit repaints immediately so the eraser feels connected
+     * to the pen; the rest coalesce.
+     */
+    private fun throttledEraseRepaint() {
+        val now = SystemClock.uptimeMillis()
+        val elapsed = now - lastEraseRepaintMs
+        if (elapsed >= ERASE_REPAINT_INTERVAL_MS) {
+            lastEraseRepaintMs = now
+            committedDirty = true
+            invalidate()
+        } else if (!eraseRepaintPending) {
+            eraseRepaintPending = true
+            postDelayed(eraseRepaintTick, ERASE_REPAINT_INTERVAL_MS - elapsed)
+        }
+    }
+
+    /** How far past its centreline the ink of [stroke] actually reaches, in px. */
+    private fun inkOutsetPx(stroke: InkStroke): Float =
+        renderers.rendererFor(stroke.tool.pen).outsetPx(stroke.tool, renderContext)
 
     private fun assertMainThread(member: String) {
         if (!SproutCanvas.strictMode) return
@@ -595,9 +710,38 @@ public class SproutCanvasView @JvmOverloads constructor(
         }
 
         override fun onEraseAt(path: List<PointF>, radiusPx: Float) {
-            // Stroke hit-testing arrives with the generic engine in Phase 2, together with the AABB
-            // pre-filter and the throttled redraw it needs. No engine emits this yet.
-            SproutLog.d { "erase path of ${path.size} points at r=$radiusPx (no hit-test yet)" }
+            if (strokesById.isEmpty()) return
+            val hits = StrokeHitTest.strokesTouching(
+                strokes = strokesById.values,
+                path = path,
+                radiusPx = radiusPx,
+                strokeOutset = ::inkOutsetPx,
+            )
+            if (hits.isEmpty()) return
+            hits.forEach { stroke ->
+                strokesById.remove(stroke.id)
+                eraseGestureRemoved[stroke.id] = stroke
+            }
+            throttledEraseRepaint()
+        }
+
+        /**
+         * The eraser left the glass.
+         *
+         * Everything the gesture removed is reported to the host **once**, here, rather than in
+         * batches as it was hit: one swipe is one action to a user, and a host implementing undo
+         * should get one entry for it. The engine is told at the same moment, and not before — on
+         * e-ink a panel repaint costs a visible full-screen flash, so one per gesture is the
+         * budget, not one per move event (PLAN.md §5.1).
+         */
+        override fun onEraseEnded() {
+            removeCallbacks(eraseRepaintTick)
+            eraseRepaintPending = false
+            if (eraseGestureRemoved.isEmpty()) return
+            val removed = eraseGestureRemoved.values.toList()
+            eraseGestureRemoved.clear()
+            onCommittedContentChanged(RepaintReason.STROKES_REMOVED)
+            listener?.onStrokesRemoved(removed)
         }
 
         override fun onPenActiveChanged(active: Boolean) {
@@ -614,7 +758,19 @@ public class SproutCanvasView @JvmOverloads constructor(
             // rendering, which redraws the whole view regardless. The region is not wasted: it is
             // what a hardware engine passes to its own panel repaint, where the area genuinely
             // matters — a full-panel refresh on an e-ink screen is a visible black flash.
+            committedDirty = true
             invalidate()
         }
+    }
+
+    private companion object {
+        /**
+         * The floor on time between repaints while an eraser is moving.
+         *
+         * ~16 repaints a second: fast enough that ink disappears under the eraser rather than
+         * behind it, slow enough that a page of committed content is not re-recorded on every
+         * digitizer sample.
+         */
+        const val ERASE_REPAINT_INTERVAL_MS = 60L
     }
 }

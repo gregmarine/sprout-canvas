@@ -10,6 +10,10 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.SproutCanvasLab">
 
+        <!--
+            The launcher entry. The device tooling starts this component by name, so renaming it
+            breaks every install script in .claude/skills/device-build-install.
+        -->
         <activity
             android:name=".LabActivity"
             android:exported="true"
@@ -19,5 +23,30 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!--
+            Each instrument gets its own Activity. `configChanges` is deliberately NOT set: a
+            rotation must recreate these screens, because surviving one is exactly what G8 promises
+            and a screen that dodged the recreation would be proving nothing.
+        -->
+        <activity
+            android:name=".CanvasLabActivity"
+            android:exported="false"
+            android:label="@string/screen_canvas" />
+
+        <activity
+            android:name=".ToolsLabActivity"
+            android:exported="false"
+            android:label="@string/screen_tools" />
+
+        <activity
+            android:name=".OverlaysLabActivity"
+            android:exported="false"
+            android:label="@string/screen_overlays" />
+
+        <activity
+            android:name=".DeviceReportActivity"
+            android:exported="false"
+            android:label="@string/screen_device_report" />
     </application>
 </manifest>

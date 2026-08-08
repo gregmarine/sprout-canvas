@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The Canvas screen.
+
+    The canvas lives inside a ScrollView on purpose: that is how a host app will embed it, and a
+    drawing surface that misbehaved inside a scrolling parent would be a component in name only.
+-->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/paper_white">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="12dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/screen_canvas"
+            android:textColor="@color/ink_black"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <TextView
+            style="@style/LabHint"
+            android:text="@string/canvas_hint" />
+
+        <!--
+            The canvas and its drag handle. The handle is a sibling drawn over the canvas rather
+            than a child of it: the library owns nothing inside its own rectangle but ink.
+        -->
+        <FrameLayout
+            android:id="@+id/canvasContainer"
+            android:layout_width="match_parent"
+            android:layout_height="320dp"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/canvas_frame">
+
+            <com.symmetricalpalmtree.sprout.canvas.SproutCanvasView
+                android:id="@+id/canvas"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+            <View
+                android:id="@+id/resizeHandle"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_gravity="bottom|end"
+                android:background="@color/ink_black"
+                android:contentDescription="@string/resize_handle" />
+        </FrameLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/sizeSmall"
+                style="@style/LabCompactButton"
+                android:text="@string/size_small" />
+
+            <Button
+                android:id="@+id/sizeMedium"
+                style="@style/LabCompactButton"
+                android:text="@string/size_medium" />
+
+            <Button
+                android:id="@+id/sizeTall"
+                style="@style/LabCompactButton"
+                android:text="@string/size_tall" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/ingestButton"
+                style="@style/LabCompactButton"
+                android:text="@string/action_ingest" />
+
+            <Button
+                android:id="@+id/roundTripButton"
+                style="@style/LabCompactButton"
+                android:text="@string/action_round_trip" />
+
+            <Button
+                android:id="@+id/clearButton"
+                style="@style/LabCompactButton"
+                android:text="@string/action_clear" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/canvasStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:fontFamily="monospace"
+            android:textColor="@color/ink_black"
+            android:textIsSelectable="true"
+            android:textSize="12sp" />
+
+        <!--
+            Deliberate filler: it makes the parent genuinely scrollable, so writing on the canvas
+            has to not scroll the page — which is the thing this screen is proving.
+        -->
+        <TextView
+            style="@style/LabHint"
+            android:layout_marginTop="24dp"
+            android:text="@string/canvas_scroll_note" />
+    </LinearLayout>
+</ScrollView>

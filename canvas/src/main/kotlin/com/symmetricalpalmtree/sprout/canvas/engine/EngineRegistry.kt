@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.annotation.MainThread
 import androidx.annotation.VisibleForTesting
 import com.symmetricalpalmtree.sprout.canvas.SproutLog
+import com.symmetricalpalmtree.sprout.canvas.engine.generic.GenericInkEngineFactory
 
 /**
  * Knows which [InkEngineFactory]s exist and picks one for a canvas.
@@ -49,10 +50,12 @@ public object EngineRegistry {
     /**
      * The engine used when nothing else is supported. Always supported by definition.
      *
-     * [NoOpInkEngineFactory] until Phase 2 replaces it with the generic software engine.
+     * The software engine: there is no device this library runs on where an Android `MotionEvent`
+     * and an Android `Canvas` are unavailable, so every other engine is an optimisation over this
+     * one rather than a replacement for it.
      */
     @VisibleForTesting
-    internal var fallbackFactory: InkEngineFactory = NoOpInkEngineFactory
+    internal var fallbackFactory: InkEngineFactory = GenericInkEngineFactory
 
     /**
      * Registers a factory, replacing any earlier one with the same [EngineInfo.id].
@@ -176,7 +179,7 @@ public object EngineRegistry {
     @VisibleForTesting
     internal fun resetForTesting() {
         factories.clear()
-        fallbackFactory = NoOpInkEngineFactory
+        fallbackFactory = GenericInkEngineFactory
         discovered = false
     }
 }

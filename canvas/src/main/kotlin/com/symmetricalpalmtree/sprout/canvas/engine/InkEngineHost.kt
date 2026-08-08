@@ -59,6 +59,22 @@ public interface InkEngineHost {
     public fun onEraseAt(path: List<PointF>, radiusPx: Float)
 
     /**
+     * The erase gesture ended — the eraser left the glass.
+     *
+     * ### Why the boundary has to be reported
+     *
+     * One swipe of an eraser produces a stream of [onEraseAt] calls, and the strokes it removes
+     * arrive a few at a time. Without a gesture boundary the host would have to report each of
+     * those batches to the app separately, and a host implementing undo would get five or ten
+     * entries for something the user experienced as a single action. It is also the point at which
+     * a hardware engine may finally repaint its panel: doing that per move event costs one
+     * full-screen flash per event (PLAN.md §5.1).
+     *
+     * Safe to call when nothing was erased; the host ignores it.
+     */
+    public fun onEraseEnded()
+
+    /**
      * The pen-activity gate changed. See [InkEngine.isPenActive] for why this exists and why it is
      * public API rather than an internal detail.
      */

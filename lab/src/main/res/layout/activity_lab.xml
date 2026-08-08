@@ -1,16 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Phase 1 — the API contract, exercised.
+    The Lab's home screen: what the library chose on this device, and a way into each instrument.
 
-    Nothing draws yet: the stub engine captures nothing and renders nothing (PLAN.md Phase 1). What
-    this screen proves is that the app-facing surface exists, reads well, and is wired end to end —
-    an engine gets selected, capabilities come back from it, ingest and removal work, and an
-    exclusion zone tracks a real overlay view.
-
-    The Canvas / Tools / Overlays screens proper arrive in Phase 2.
+    Every screen below asks the library a different question, and each one exists because some
+    acceptance criterion in PLAN.md §7 can only be answered by a human looking at a panel.
 -->
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/paper_white">
@@ -37,103 +32,58 @@
             android:textColor="@color/ink_light"
             android:textSize="13sp" />
 
-        <!--
-            The canvas, configured entirely from XML — this is the attrs.xml surface under test.
-            A host app that never touches Kotlin still gets the pen, width and colour it asked for.
-        -->
-        <FrameLayout
-            android:layout_width="match_parent"
-            android:layout_height="220dp"
-            android:layout_marginTop="12dp">
-
-            <com.symmetricalpalmtree.sprout.canvas.SproutCanvasView
-                android:id="@+id/canvas"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:background="@color/paper_white"
-                app:sproutColor="@color/ink_black"
-                app:sproutPen="fountain"
-                app:sproutWidthDp="2.0" />
-
-            <!--
-                A floating toolbar over the canvas. Registered with addExclusionZone(View) and then
-                forgotten about: the library tracks its layout and visibility itself. This is the
-                direct proof of G7, and in Phase 2 it becomes something you can write around.
-            -->
-            <TextView
-                android:id="@+id/floatingToolbar"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="top|end"
-                android:layout_margin="8dp"
-                android:background="@color/ink_black"
-                android:padding="8dp"
-                android:text="@string/toolbar_label"
-                android:textColor="@color/paper_white"
-                android:textSize="12sp" />
-        </FrameLayout>
-
         <TextView
-            android:id="@+id/canvasNote"
+            android:id="@+id/engineSummary"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="@string/phase_one_note"
-            android:textColor="@color/ink_light"
-            android:textSize="12sp" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:orientation="horizontal">
-
-            <Button
-                android:id="@+id/ingestButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/action_ingest"
-                android:textSize="12sp" />
-
-            <Button
-                android:id="@+id/roundTripButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/action_round_trip"
-                android:textSize="12sp" />
-
-            <Button
-                android:id="@+id/clearButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/action_clear"
-                android:textSize="12sp" />
-        </LinearLayout>
-
-        <TextView
-            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
-            android:text="@string/device_report_heading"
-            android:textColor="@color/ink_black"
-            android:textSize="16sp"
-            android:textStyle="bold" />
-
-        <!--
-            The diagnostic the Onyx pen survey needed and did not have: what the library chose, and
-            what it believes this device can do. Every device session should start here.
-        -->
-        <TextView
-            android:id="@+id/deviceReport"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
             android:fontFamily="monospace"
             android:textColor="@color/ink_black"
             android:textIsSelectable="true"
-            android:textSize="11sp" />
+            android:textSize="12sp" />
+
+        <Button
+            android:id="@+id/openCanvas"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/screen_canvas" />
+
+        <TextView
+            style="@style/LabHint"
+            android:text="@string/screen_canvas_hint" />
+
+        <Button
+            android:id="@+id/openTools"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/screen_tools" />
+
+        <TextView
+            style="@style/LabHint"
+            android:text="@string/screen_tools_hint" />
+
+        <Button
+            android:id="@+id/openOverlays"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/screen_overlays" />
+
+        <TextView
+            style="@style/LabHint"
+            android:text="@string/screen_overlays_hint" />
+
+        <Button
+            android:id="@+id/openDeviceReport"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/screen_device_report" />
+
+        <TextView
+            style="@style/LabHint"
+            android:text="@string/screen_device_report_hint" />
     </LinearLayout>
 </ScrollView>

@@ -24,9 +24,11 @@ import com.symmetricalpalmtree.sprout.canvas.model.ToolSpec
  *
  * ### What it is not
  *
- * It is not a fallback for a device the library does not recognize; that is the generic engine's
- * job, and from Phase 2 onwards the generic engine is the last resort instead. Nothing about this
- * class should survive into a shipping app's behaviour.
+ * It is not a fallback for a device the library does not recognize — that is
+ * [com.symmetricalpalmtree.sprout.canvas.engine.generic.GenericInkEngine]'s job, and it is what the
+ * registry falls back to. This engine is chosen only when a canvas asks for it by name, which the
+ * conformance harness does in order to measure the view's own behaviour with no engine underneath
+ * it. Nothing about this class should survive into a shipping app's behaviour.
  */
 public class NoOpInkEngine(
     @Suppress("unused") private val host: InkEngineHost,
@@ -95,10 +97,9 @@ public class NoOpInkEngine(
 }
 
 /**
- * Factory for [NoOpInkEngine]. Supported everywhere, chosen nowhere a real engine exists.
- *
- * Registered as the registry's fallback until Phase 2 delivers `GenericInkEngineFactory`, which
- * takes its place as the always-supported last resort.
+ * Factory for [NoOpInkEngine]. Reports itself supported everywhere, and is never selected unless a
+ * canvas asks for [EngineIds.NO_OP] by name — its priority puts it below every real engine, and the
+ * registry's fallback is the generic software engine.
  */
 public object NoOpInkEngineFactory : InkEngineFactory {
 

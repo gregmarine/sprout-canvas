@@ -2,10 +2,55 @@
 <resources>
     <string name="app_name">Sprout Canvas Lab</string>
     <string name="library_version">sprout-canvas %1$s</string>
-    <string name="phase_one_note">Phase 1 — API contract only. The stub engine captures nothing and draws nothing; the buttons below exercise ingest, round-trip and removal for real.</string>
-    <string name="toolbar_label">Toolbar</string>
-    <string name="device_report_heading">Device report</string>
+
+    <!-- Home -->
+    <string name="summary_initialized">initialized:       %1$s</string>
+    <string name="summary_engines">available engines: %1$s</string>
+    <string name="summary_no_adapters">none registered (generic only)</string>
+
+    <string name="screen_canvas">Canvas</string>
+    <string name="screen_canvas_hint">Draw, erase and resize. Proves content survives a resize, a rotation and a re-layout, and that the canvas behaves inside a scrolling parent.</string>
+    <string name="screen_tools">Tools</string>
+    <string name="screen_tools_hint">Every standardized pen, width and colour, switchable mid-session, with the fidelity the running engine reports for each.</string>
+    <string name="screen_overlays">Overlays</string>
+    <string name="screen_overlays_hint">Toolbars, panels and popups over the canvas. Nothing is ever written underneath them.</string>
+    <string name="screen_device_report">Device report</string>
+    <string name="screen_device_report_hint">Selected engine, capabilities, digitizer ranges as declared, and the channel ranges actually observed in ink.</string>
+
+    <!-- Canvas screen -->
+    <string name="canvas_hint">Resize by preset or by dragging the black corner. The ink should not move.</string>
+    <string name="canvas_scroll_note">The canvas above sits inside this scrolling page on purpose — that is how a host app embeds it. Writing on it must not scroll the page.</string>
+    <string name="canvas_status">engine:  %1$s\nsize:    %2$d × %3$d px\nstrokes: %4$d\nlast:    %5$s</string>
+    <string name="resize_handle">Resize the canvas</string>
+    <string name="size_small">Small</string>
+    <string name="size_medium">Medium</string>
+    <string name="size_tall">Tall</string>
+
+    <!-- Tools screen -->
+    <string name="tools_status">tool: %1$s · %2$s · %3$s</string>
+    <string name="tools_fidelity">fidelity on %1$s: %2$s</string>
+    <string name="tools_traits">pressure-sensitive: %1$s · translucent: %2$s · engine alpha: %3$s</string>
+    <string name="tool_eraser">Eraser</string>
+
+    <!-- Overlays screen -->
+    <string name="overlays_hint">Every overlay is registered once; showing and hiding it is enough. A hidden overlay excludes nothing.</string>
+    <string name="overlays_status">registered: %1$d · visible: %2$d · armed zones: %3$d · strokes: %4$d</string>
+    <string name="overlay_toolbar">Toolbar</string>
+    <string name="overlay_bottom">Bottom</string>
+    <string name="overlay_panel">Panel</string>
+    <string name="overlay_popup">Popup</string>
+    <string name="overlay_toolbar_label">Toolbar</string>
+    <string name="overlay_bottom_label">Bottom bar</string>
+    <string name="overlay_panel_label">Side\npanel</string>
+    <string name="overlay_popup_label">Popup</string>
+
+    <!-- Device report screen -->
+    <string name="device_report_hint">Draw below to fill in the observed ranges.</string>
+
+    <!-- Actions -->
     <string name="action_ingest">Ingest</string>
     <string name="action_round_trip">Round-trip</string>
     <string name="action_clear">Clear</string>
+    <string name="action_eraser">Eraser</string>
+    <string name="action_refresh">Refresh</string>
 </resources>

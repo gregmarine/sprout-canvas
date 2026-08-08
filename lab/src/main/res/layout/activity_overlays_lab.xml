@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The Overlays screen. Four pieces of chrome at four placements, each independently toggleable,
+    all of them over a full-bleed canvas — the shapes a real host app puts on top of a drawing
+    surface, and the exact thing G7 promises will never be written under.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/paper_white"
+    android:orientation="vertical"
+    android:padding="8dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/toggleToolbar"
+            style="@style/LabCompactButton"
+            android:text="@string/overlay_toolbar" />
+
+        <Button
+            android:id="@+id/toggleBottomBar"
+            style="@style/LabCompactButton"
+            android:text="@string/overlay_bottom" />
+
+        <Button
+            android:id="@+id/toggleSidePanel"
+            style="@style/LabCompactButton"
+            android:text="@string/overlay_panel" />
+
+        <Button
+            android:id="@+id/togglePopup"
+            style="@style/LabCompactButton"
+            android:text="@string/overlay_popup" />
+
+        <Button
+            android:id="@+id/clearButton"
+            style="@style/LabCompactButton"
+            android:text="@string/action_clear" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/overlaysStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:fontFamily="monospace"
+        android:textColor="@color/ink_black"
+        android:textSize="11sp" />
+
+    <TextView
+        style="@style/LabHint"
+        android:text="@string/overlays_hint" />
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="4dp"
+        android:layout_weight="1"
+        android:background="@drawable/canvas_frame">
+
+        <com.symmetricalpalmtree.sprout.canvas.SproutCanvasView
+            android:id="@+id/canvas"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <TextView
+            android:id="@+id/floatingToolbar"
+            style="@style/LabOverlay"
+            android:layout_gravity="top|end"
+            android:layout_margin="10dp"
+            android:text="@string/overlay_toolbar_label" />
+
+        <TextView
+            android:id="@+id/sidePanel"
+            style="@style/LabOverlay"
+            android:layout_width="96dp"
+            android:layout_height="match_parent"
+            android:layout_gravity="start"
+            android:gravity="center"
+            android:text="@string/overlay_panel_label"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/bottomBar"
+            style="@style/LabOverlay"
+            android:layout_width="match_parent"
+            android:layout_gravity="bottom"
+            android:gravity="center"
+            android:text="@string/overlay_bottom_label"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/centrePopup"
+            style="@style/LabOverlay"
+            android:layout_width="200dp"
+            android:layout_height="120dp"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:text="@string/overlay_popup_label"
+            android:visibility="gone" />
+    </FrameLayout>
+</LinearLayout>

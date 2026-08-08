@@ -46,7 +46,7 @@ class EngineRegistryTest {
 
     @Test
     fun `with nothing registered the fallback wins`() {
-        assertEquals(EngineIds.NO_OP, EngineRegistry.select(context).info.id)
+        assertEquals(EngineIds.GENERIC, EngineRegistry.select(context).info.id)
     }
 
     @Test
@@ -68,7 +68,7 @@ class EngineRegistryTest {
     @Test
     fun `the fallback is used when nothing registered is supported`() {
         EngineRegistry.register(FakeFactory("onyx", priority = 100, supported = false))
-        assertEquals(EngineIds.NO_OP, EngineRegistry.select(context).info.id)
+        assertEquals(EngineIds.GENERIC, EngineRegistry.select(context).info.id)
     }
 
     @Test
@@ -101,7 +101,7 @@ class EngineRegistryTest {
     @Test
     fun `the fallback engine can be named explicitly`() {
         EngineRegistry.register(FakeFactory("onyx", priority = 100))
-        assertEquals(EngineIds.NO_OP, EngineRegistry.select(context, EngineIds.NO_OP).info.id)
+        assertEquals(EngineIds.GENERIC, EngineRegistry.select(context, EngineIds.GENERIC).info.id)
     }
 
     @Test

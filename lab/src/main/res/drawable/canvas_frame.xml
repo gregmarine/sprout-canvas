@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    A hairline border around the canvas.
+
+    Not decoration: G6 says nothing is captured outside the canvas's own rectangle, and that claim
+    is only checkable if the tester can see where the rectangle ends. The fill is the paper the host
+    supplies — the library itself never paints a background.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/paper_white" />
+    <stroke
+        android:width="1dp"
+        android:color="@color/ink_light" />
+</shape>

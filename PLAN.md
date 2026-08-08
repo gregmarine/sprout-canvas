@@ -495,9 +495,11 @@ So goldens live in their own **tagged, on-demand suite** (`./gradlew goldenTest`
 release and whenever a renderer changes — never as a gate on routine builds. Each golden carries the
 environment it was generated in, and regeneration is a single deliberate command.
 
-**Which tier hosts it is decided empirically in Phase 2**: Robolectric first (fast, no device), with
-the instrumented tier as the fallback if Robolectric's graphics fidelity proves unstable. That
-measurement, and the decision it produces, is a named Phase 2 deliverable.
+**Decided empirically in Phase 2: Robolectric, in `NATIVE` graphics mode** (R1, §10.4). Both tiers
+render the same 18 scenes from one shared definition, and on a Wacom Movink Pad 11 sixteen of the
+eighteen came back byte-identical to the JVM — the other two differing by one unit on one channel.
+The instrumented tier renders the identical scenes and remains as an on-demand cross-check, because
+either environment can move underneath the other. Written up in `docs/golden-tier.md`.
 
 ### 4.2 Instrumented tests — `src/androidTest/`, real device or emulator
 
@@ -728,7 +730,46 @@ and the `enabled=` field in `dumpsys package`.
 Fold `pm enable` into every BOOX install step, and treat "activity does not exist" on a BOOX as a
 package-state question before it is a code question.
 
-### 5.10 Build and test environment
+### 5.10 The Android view system, when a canvas lives inside it
+
+Learned in Phase 2, all four on hardware, all four now covered by a test. Each one presents as a
+canvas that is subtly wrong rather than as anything that looks like a bug.
+
+- **A `GONE` view is never laid out, so its layout listener never fires.** Watching each registered
+  overlay's own layout therefore misses the moment it is dismissed, and the canvas keeps refusing to
+  capture in a region where there is now nothing at all. Watch the **view tree**
+  (`ViewTreeObserver.OnGlobalLayoutListener`), not the view.
+- **`INVISIBLE` does not reach a global layout listener at all.** The documentation for
+  `OnGlobalLayoutListener` mentions visibility, which reads as a promise; measured on a Wacom Movink
+  Pad (API 34), `GONE` fires it and `INVISIBLE` does not, because an invisible view keeps its space
+  and no layout pass is scheduled. Catching it needs a second signal — a pre-draw listener comparing
+  each tracked view's `isShown` against the last value seen, which is an int and a short parent walk
+  per registered view.
+- **Refusing to capture must not mean refusing to receive.** Android stops delivering the rest of a
+  gesture to a view that returned false from its `ACTION_DOWN`. Declining a stylus-down — outside
+  the bounds, under a toolbar, on a paused canvas — therefore means the `ACTION_UP` never arrives,
+  and the pen-activity gate latches open and silently suppresses the host's chrome for the rest of
+  the session. The engine consumes every stylus event and decides separately whether to capture it.
+- **A canvas inside a scrolling parent loses its strokes unless it claims the gesture.** A
+  `ScrollView` takes a gesture over once it has moved far enough and sends the child an
+  `ACTION_CANCEL`, which is most strokes. `requestDisallowInterceptTouchEvent(true)` for the
+  duration — **only** for gestures the engine consumed, so a finger still scrolls the page while the
+  pen draws on it.
+
+### 5.11 Capability probing
+
+- **Never let one stroke retract a capability.** Synthesized input (`adb shell input stylus`) comes
+  from a *virtual* device that declares no motion axes, and so does a knuckle on the glass or a
+  capacitive stylus on a tablet that also has an EMR pen. Adopting whatever last wrote means a
+  pressure-sensitive tablet permanently reporting `TIMESTAMP`-only, with every pressure pen greyed
+  out in the host's picker and no way back. Capabilities describe *the device* and only ever grow; a
+  stroke carries its own channels and its own calibration, so nothing is misrepresented.
+- **`adb shell input stylus` works, and is worth knowing about.** It produces genuine
+  `TOOL_TYPE_STYLUS` events, so most of a device protocol can be scripted rather than tapped out by
+  hand — nine pens, exclusion zones and resize were all verified that way. Just remember the events
+  carry no pressure, so pressure-driven behaviour still needs the actual pen.
+
+### 5.12 Build and test environment
 
 Not device quirks, but they cost time in the same way — each one presents as a mysterious failure in
 code that is actually fine.
@@ -886,6 +927,13 @@ fidelity measurement selects (§4.1.1).
 
 **Device protocol.** Generic Android stylus tablet (S26 Ultra S-Pen and/or Wacom Movink Pad). Run the
 conformance items that exist so far; export the first device report.
+
+> **Done on the Wacom Movink Pad 11** — `docs/conformance/mip11-2026-08-08.md`. Also installed and
+> launched on the **NA5C**, which correctly selects the generic engine (no vendor adapter exists
+> until Phase 4). A tip worth reusing: **`adb shell input stylus` produces genuine
+> `TOOL_TYPE_STYLUS` events**, so nine-pen coverage, exclusion zones and resize were all scripted
+> rather than tapped out by hand — with the caveat that those events come from a virtual device
+> declaring no axes, so anything pressure-driven still needs the real pen.
 
 ---
 
@@ -1069,9 +1117,9 @@ Update the row at the end of each phase, then commit and push.
 |---:|---|---|---|---|---|
 | — | Planning | ✅ Complete | `2dc9949` | 2026-08-07 | This document |
 | 0 | Foundation & build scaffolding | ✅ Complete | `2dc9949` | 2026-08-07 | Build + 4 JVM tests green from clean; `publishToMavenLocal` resolves `com.symmetricalpalmtree.sprout:canvas:0.1.0-SNAPSHOT` (AAR + sources + MIT POM); Lab installs, launches and is findable by name on **G10**. Three things worth carrying forward: (1) Java 17 comes from `jvmToolchain(17)`, **not** an `org.gradle.java.home` pin — an absolute JDK path in a committed file breaks every other machine; (2) explicit API mode was verified **by probe**, not assumed — it did not appear in the compiler args when grepped, and has historically been unreliable on Android variants; (3) BOOX disables freshly sideloaded APKs — see §5.9. |
-| 1 | Core model & public API contract | ✅ Complete | `ac9ce38` | 2026-08-07 | 151 JVM tests green (144 `:canvas`, 7 `:lab`); `build test` and `publishToMavenLocal` clean; explicit API mode re-verified by probe (a bare `fun f() = 42` fails the build). Four contract decisions taken with the user, all recorded in §10.3. Five things worth carrying forward: (1) **`StrokeSamples.channels` is derived, not passed** — §3.5 sketched it as a constructor parameter, but a mask supplied separately from the data it describes is a mask that can disagree with it; deriving deletes the failure mode. (2) **The vendor tables are `@RestrictTo(LIBRARY_GROUP)`** — adapters are separate Gradle modules so `internal` cannot reach them, but the Onyx style ints and Supernote pen codes must not become frozen public API; `PenFidelity` and `capabilities.fidelity()` stay fully public because that is what a host actually needs. (3) **`androidx.annotation` moved to `api`** — `@ColorInt` / `@IntDef` / `@MainThread` / `@RestrictTo` appear on the public surface, and an annotation a consumer's compiler cannot resolve does nothing. Still exactly one dependency. (4) **`-Xannotation-default-target=param-property`** is on for `:canvas`; without it a constructor-property annotation lands on the value parameter only, so a consumer reading the getter sees nothing. Lint then immediately caught a real `@IntDef` gap (`InkChannel.NONE` had to be declared as a legal value) — the annotations are load-bearing, not decorative. (5) **`SproutLog` was created here, not in Phase 2** — D11's missing-`initialize` error needed it. §3.9 corrected: `findViewTreeLifecycleOwner()` cannot be used, it needs `androidx.lifecycle`. Build environment: this machine's default `java` is now JDK 26, which Gradle 8.14 cannot run on — see §5.10. **Device-verified on NA5C** (not required by this phase): the report reads `initialized: true`, no adapters found, fallback engine selected, `app:sproutPen="fountain"` honoured from XML, `1 registered, 1 active` exclusion zone, and Ingest → Round-trip gives `strokes: 2 · round trip: identical`. Two things only hardware could show: (a) **`pm enable` loses a race with Onyx** — the NA5C re-disabled the package after a successful enable, so enable must be issued in the *same device shell* as the launch, every launch (§5.9 updated, skill updated); (b) the Lab's device report refreshed from `onResume` alone showed `0 active` zones with the toolbar plainly on the canvas, because zone computation is coalesced to one posted pass per layout and `onResume` runs before the first layout — now also refreshed from `onWindowFocusChanged`. That was a bug in the diagnostic, not the tracker, which is exactly the sort of thing that sends a later session hunting a fault that is not there. |
-| 2 | Generic engine: capture and render | ⬜ Not started | | | |
-| 3 | Tooling & rendering fidelity | ⬜ Not started | | | |
+| 1 | Core model & public API contract | ✅ Complete | `ac9ce38` | 2026-08-07 | 151 JVM tests green (144 `:canvas`, 7 `:lab`); `build test` and `publishToMavenLocal` clean; explicit API mode re-verified by probe (a bare `fun f() = 42` fails the build). Four contract decisions taken with the user, all recorded in §10.3. Five things worth carrying forward: (1) **`StrokeSamples.channels` is derived, not passed** — §3.5 sketched it as a constructor parameter, but a mask supplied separately from the data it describes is a mask that can disagree with it; deriving deletes the failure mode. (2) **The vendor tables are `@RestrictTo(LIBRARY_GROUP)`** — adapters are separate Gradle modules so `internal` cannot reach them, but the Onyx style ints and Supernote pen codes must not become frozen public API; `PenFidelity` and `capabilities.fidelity()` stay fully public because that is what a host actually needs. (3) **`androidx.annotation` moved to `api`** — `@ColorInt` / `@IntDef` / `@MainThread` / `@RestrictTo` appear on the public surface, and an annotation a consumer's compiler cannot resolve does nothing. Still exactly one dependency. (4) **`-Xannotation-default-target=param-property`** is on for `:canvas`; without it a constructor-property annotation lands on the value parameter only, so a consumer reading the getter sees nothing. Lint then immediately caught a real `@IntDef` gap (`InkChannel.NONE` had to be declared as a legal value) — the annotations are load-bearing, not decorative. (5) **`SproutLog` was created here, not in Phase 2** — D11's missing-`initialize` error needed it. §3.9 corrected: `findViewTreeLifecycleOwner()` cannot be used, it needs `androidx.lifecycle`. Build environment: this machine's default `java` is now JDK 26, which Gradle 8.14 cannot run on — see §5.12. **Device-verified on NA5C** (not required by this phase): the report reads `initialized: true`, no adapters found, fallback engine selected, `app:sproutPen="fountain"` honoured from XML, `1 registered, 1 active` exclusion zone, and Ingest → Round-trip gives `strokes: 2 · round trip: identical`. Two things only hardware could show: (a) **`pm enable` loses a race with Onyx** — the NA5C re-disabled the package after a successful enable, so enable must be issued in the *same device shell* as the launch, every launch (§5.9 updated, skill updated); (b) the Lab's device report refreshed from `onResume` alone showed `0 active` zones with the toolbar plainly on the canvas, because zone computation is coalesced to one posted pass per layout and `onResume` runs before the first layout — now also refreshed from `onWindowFocusChanged`. That was a bug in the diagnostic, not the tracker, which is exactly the sort of thing that sends a later session hunting a fault that is not there. |
+| 2 | Generic engine: capture and render | ✅ Complete | | 2026-08-08 | **The canvas draws.** 255 JVM tests (241 `:canvas`, 14 `:lab`) + 20 instrumented tests on the MIP11 (0 skipped, so every channel assertion actually ran) + an 18-scene golden suite. Scope: at the user's direction Phase 2 delivered **all nine software renderers**, not the two the phase strictly needed — so most of Phase 3 landed here (see the Phase 3 note below). **R1 is resolved** — Robolectric with `NATIVE` graphics hosts the golden suite; 16 of 18 scenes are byte-identical to the Wacom tablet and the other two differ by 1 on one channel (`docs/golden-tier.md`). Seven things worth carrying forward: (1) **The `InkEngineHost` SPI gained `onEraseEnded()`** — one eraser swipe is one action to a user, so the strokes it removed are reported once at the gesture boundary rather than in batches, and a hardware engine gets exactly one panel repaint out of it instead of one per move event. (2) **Renderers are split into a pure-Kotlin solver and a thin `android.graphics` shell.** Taper curves, nib angle, dash cadence, decimation and grain determinism are all asserted in plain JUnit in milliseconds on every build; only *appearance* needs pixels. (3) **The renderer registry is per canvas, not global** — two canvases in one process can run different engines, which is exactly how the harness compares the hardware and software ink paths. (4) **Texture grain must be seeded from the stroke's own id**, or `setStrokes(getStrokes())` stops being a visual no-op for the pencil and charcoal alone — a G4 failure that would get blamed on the ingest path. (5) **Grain scale has to be decoupled from the width multiplier**: charcoal's ×5 scaled its stamps up with it until they read as a row of circles. (6) **A calligraphy nib modelled as a zero-thickness line draws nothing at all** when the stroke runs along its own angle — caught by a golden, not by geometry. (7) **Robolectric's default graphics mode records draw calls without executing them**, so any pixel test needs `@GraphicsMode(NATIVE)` or it passes forever while asserting nothing. Four bugs were found only by putting it on hardware — all fixed, all now covered by a test, all recorded in §5.10–§5.11 and `docs/conformance/mip11-2026-08-08.md`. |
+| 3 | Tooling & rendering fidelity | 🟡 Mostly delivered in Phase 2 | | | All nine software renderers, the pressure/velocity curves, the per-pen width multipliers, highlighter alpha, the colour chokepoint, `PenFidelity` reporting and the Lab's Tools screen all landed in Phase 2. **What remains:** tuning against a real pen in a real hand (the injected-input caveat in the conformance report), per-pen golden coverage beyond the 18 scenes already committed, and the honest re-examination of `GenericPenTable` — every pen currently reports `NATIVE`, which is right for a reference renderer but should be re-confirmed once the vendor paths exist to be compared against. |
 | 4 | Onyx adapter (BOOX) | ⬜ Not started | | | |
 | 5 | Supernote adapter (Ratta) | ⬜ Not started | | | |
 | 6 | Conformance harness & regression | ⬜ Not started | | | |
@@ -1127,7 +1175,6 @@ phase, not by preference.
 
 | # | Question | Answered by | Fallback |
 |---|---|---|---|
-| R1 | Which tier hosts the golden-image suite — Robolectric (fast, no device) or instrumented? Depends entirely on Robolectric's graphics fidelity for our renderers. | Phase 2 measurement | Instrumented tier |
 | R2 | Does the Onyx firmware overlay honour **alpha** in live preview? If not, `HIGHLIGHTER` reads opaque while writing and only becomes translucent on commit. | Phase 4 device check | Report the limitation through `capabilities`; never hide it |
 | R3 | Does the Supernote firmware honour a per-stroke width fine enough to express our dp ladder, or is the EMR range coarse? | Phase 5 device tuning | Quantize the ladder to what the hardware actually resolves, and report it |
 
@@ -1142,6 +1189,13 @@ expensive to reverse once the adapters were written against them.
 | P2 | How broad is `SproutCanvasListener`? | **Full event set, every method defaulted.** Erase hands back the removed `InkStroke`s, not their ids — the library owns no history, so a host implementing undo would otherwise have to keep a shadow copy of the whole canvas. Installation (`setStrokes`/`addStroke`) fires nothing; removal fires whatever caused it. |
 | P3 | How far does `NoOpInkEngine` go? | **Truly inert.** It reports capabilities and accepts every call, captures nothing and draws nothing. Ingest, removal and listener dispatch are real, so the model is exercisable on a device; capture is exercised by a recording fake in tests. No throwaway code for Phase 2 to unpick. |
 | P4 | How visible are the vendor mapping tables? | **`@RestrictTo(LIBRARY_GROUP)` for the vendor constants, fully public for fidelity.** Adapters compile against `OnyxPenTable` / `SupernotePenTable`; a host app gets a lint error for touching an Onyx style int, and reads `capabilities.fidelity(pen)` instead. |
+
+### 10.4 Resolved in Phase 2 (2026-08-08)
+
+| # | Question | Resolution |
+|---|---|---|
+| R1 | Which tier hosts the golden-image suite — Robolectric or instrumented? | **Robolectric, in `NATIVE` graphics mode.** Measured rather than preferred: both tiers render the same 18 scenes, and on a Wacom Movink Pad 11 (API 34) **16 of 18 came back byte-identical** to the JVM, with the other two differing by **1 unit on one channel** across a few hundred anti-aliased pixels. Nothing about goldens needs hardware, so the instrumented tier buys only a cross-check — which it keeps providing, on demand, through `GoldenImageInstrumentedTest`. The measurement and what would overturn it are in `docs/golden-tier.md`. |
+| P5 | Does the erase gesture need a boundary in the engine SPI? | **Yes — `InkEngineHost.onEraseEnded()` was added.** One swipe of an eraser produces a stream of `onEraseAt` calls; without a boundary a host implementing undo gets five or ten entries for one user action, and a hardware engine has no moment at which one panel repaint is correct rather than one per move event. |
 
 ---
 

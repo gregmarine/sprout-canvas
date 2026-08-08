@@ -2,6 +2,7 @@ package com.symmetricalpalmtree.sprout.canvas.geometry
 
 import android.graphics.Rect
 import android.view.View
+import android.view.ViewTreeObserver
 
 /**
  * Keeps the canvas's exclusion zones up to date as the host's chrome moves.
@@ -16,19 +17,40 @@ import android.view.View
  *
  * Manual rects are still accepted, for chrome that is not a `View` at all.
  *
+ * ### What it listens to, and why it is the view *tree*
+ *
+ * The obvious implementation watches each registered view's own layout. It is also wrong, and
+ * wrong in a way that only shows up on a device: **a view set to `GONE` is never laid out**, so its
+ * layout listener never fires and its zone stays armed after the chrome is dismissed. The canvas is
+ * then left with a dead region exactly where a popup used to be — nothing on screen explains it and
+ * no amount of tapping fixes it.
+ *
+ * So the tracker listens to the canvas's [ViewTreeObserver] instead. `OnGlobalLayoutListener` covers
+ * hiding, showing, moving and resizing in one signal.
+ *
+ * It does not cover **`INVISIBLE`**, though the documentation's mention of visibility suggests it
+ * should. Measured on a Wacom Movink Pad (API 34): `GONE` fires it and `INVISIBLE` does not, because
+ * an invisible view keeps its space and the framework never schedules a layout pass. So a second,
+ * deliberately cheap listener runs before each draw and compares each tracked view's [View.isShown]
+ * against the last value seen — an int and a short parent walk per registered view, and a flush only
+ * when one of them actually changed.
+ *
  * ### Coalescing
  *
- * A layout pass can fire the listener once per registered view. Recomputing and re-arming the
- * engine for each of them would push several updates for one visual change — and on hardware
- * engines re-arming is not free. Changes set a dirty flag and one recomputation is posted to the
- * view.
+ * A layout pass fires that listener for the whole tree, and a screen full of chrome can change
+ * several things at once. Recomputing and re-arming the engine for each would push several updates
+ * for one visual change — and on hardware engines re-arming is not free. Changes set a dirty flag
+ * and one recomputation is posted to the view.
  */
 internal class ExclusionZoneTracker(
     private val canvas: View,
     private val onZonesChanged: () -> Unit,
 ) {
 
-    private class Entry(val trackedView: View?, val staticRect: Rect?)
+    private class Entry(val trackedView: View?, val staticRect: Rect?) {
+        /** The last visibility seen, so a change can be spotted without recomputing any geometry. */
+        var wasShown: Boolean = trackedView?.isShown ?: true
+    }
 
     private val entries = LinkedHashMap<String, Entry>()
     private val canvasLocation = IntArray(2)
@@ -37,16 +59,34 @@ internal class ExclusionZoneTracker(
     private var flushPosted = false
 
     /**
-     * Whether the layout listeners are currently installed.
+     * Whether the tree observer is currently installed.
      *
-     * [View.addOnLayoutChangeListener] does not de-duplicate, so a canvas that attaches and
-     * detaches repeatedly — a fragment in a pager, a recycled list row — would accumulate a copy of
-     * the listener per cycle and fan one layout change out into a growing pile of work.
+     * Tracked rather than assumed, because a canvas can attach and detach repeatedly — a fragment
+     * in a pager, a recycled list row — and adding the listener twice would fan one layout pass out
+     * into a growing pile of duplicate work.
      */
-    private var listenersAttached = true
+    private var listenerAttached = false
 
-    private val layoutListener =
-        View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> postFlush() }
+    private val layoutListener = ViewTreeObserver.OnGlobalLayoutListener { postFlush() }
+
+    /**
+     * Catches the visibility changes a layout pass does not report — see the class KDoc.
+     *
+     * Always returns true: this observes, and must never delay or cancel a frame.
+     */
+    private val visibilityListener = ViewTreeObserver.OnPreDrawListener {
+        var changed = false
+        for (entry in entries.values) {
+            val view = entry.trackedView ?: continue
+            val shown = view.isShown
+            if (shown != entry.wasShown) {
+                entry.wasShown = shown
+                changed = true
+            }
+        }
+        if (changed) postFlush()
+        true
+    }
 
     /** Views registered so far. */
     val size: Int get() = entries.size
@@ -54,7 +94,6 @@ internal class ExclusionZoneTracker(
     /** Registers [view], tracking its bounds and visibility until it is removed. */
     fun addView(id: String, view: View) {
         remove(id)
-        if (listenersAttached) view.addOnLayoutChangeListener(layoutListener)
         entries[id] = Entry(trackedView = view, staticRect = null)
         postFlush()
     }
@@ -68,8 +107,7 @@ internal class ExclusionZoneTracker(
 
     /** Removes a registration. Returns true if one existed. */
     fun remove(id: String): Boolean {
-        val removed = entries.remove(id) ?: return false
-        removed.trackedView?.removeOnLayoutChangeListener(layoutListener)
+        entries.remove(id) ?: return false
         postFlush()
         return true
     }
@@ -77,23 +115,30 @@ internal class ExclusionZoneTracker(
     /** Removes every registration. */
     fun clear() {
         if (entries.isEmpty()) return
-        entries.values.forEach { it.trackedView?.removeOnLayoutChangeListener(layoutListener) }
         entries.clear()
         postFlush()
     }
 
-    /** Detaches every listener without notifying. Called when the canvas leaves its window. */
+    /** Stops observing without notifying. Called when the canvas leaves its window. */
     fun releaseListeners() {
-        if (!listenersAttached) return
-        listenersAttached = false
-        entries.values.forEach { it.trackedView?.removeOnLayoutChangeListener(layoutListener) }
+        if (!listenerAttached) return
+        listenerAttached = false
+        canvas.viewTreeObserver.removeOnGlobalLayoutListener(layoutListener)
+        canvas.viewTreeObserver.removeOnPreDrawListener(visibilityListener)
     }
 
-    /** Re-attaches every listener. Called when the canvas returns to a window. */
+    /**
+     * Starts observing the canvas's view tree. Called when the canvas joins a window.
+     *
+     * The observer is only meaningful while attached: a detached view hands back a floating
+     * observer that is merged into the real one later, and a listener added to it would be silently
+     * dropped.
+     */
     fun reattachListeners() {
-        if (listenersAttached) return
-        listenersAttached = true
-        entries.values.forEach { it.trackedView?.addOnLayoutChangeListener(layoutListener) }
+        if (listenerAttached) return
+        listenerAttached = true
+        canvas.viewTreeObserver.addOnGlobalLayoutListener(layoutListener)
+        canvas.viewTreeObserver.addOnPreDrawListener(visibilityListener)
     }
 
     /**

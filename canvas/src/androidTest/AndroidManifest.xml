@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The instrumented tier's own manifest.
+
+    It exists for one reason: the host Activities the tests lay canvases out in have to be declared
+    somewhere, and a library module's own manifest must never carry test scaffolding into the AAR
+    that ships to consumers.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <activity
+            android:name="com.symmetricalpalmtree.sprout.canvas.CanvasInstrumentedTest$CanvasHostActivity"
+            android:exported="false" />
+
+        <activity
+            android:name="com.symmetricalpalmtree.sprout.canvas.golden.GoldenImageInstrumentedTest$GoldenHostActivity"
+            android:exported="false" />
+    </application>
+</manifest>

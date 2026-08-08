@@ -88,6 +88,35 @@ Recorded in full at PLAN.md §5.9. First hit on the G10, 2026-08-07.
 
 ---
 
+## Driving the canvas without a human
+
+`adb shell input` can send **real stylus events**, which makes most of a device protocol scriptable:
+
+```sh
+adb -s <serial> shell input stylus swipe 200 900 1200 1000 500   # a stroke, 500 ms
+adb -s <serial> shell input tap <x> <y>                           # buttons (finger)
+```
+
+The canvas captures stylus and eraser tool types only, so `input touchscreen`/`tap` will **not**
+draw — which is also how the finger-draws-nothing behaviour gets checked.
+
+> **⚠ Injected events carry no pressure, tilt or orientation.** They come from a virtual input
+> device that declares no motion axes, so strokes drawn this way carry `TIMESTAMP` only, and the
+> pressure-sensitive pens fall back to their velocity curve. Anything about pressure, tilt or
+> writing feel still needs the real pen in a real hand.
+
+The Lab's screens are `exported="false"`, so `am start` cannot open them directly — launch
+`LabActivity` and `input tap` the button you want.
+
+## Running the instrumented suite
+
+```sh
+ANDROID_SERIAL=<serial> ./gradlew :canvas:connectedDebugAndroidTest
+```
+
+Watch the **skip count**: every channel assertion is guarded by what the attached digitizer actually
+declares, so a run reporting skips is a run where the interesting half did not execute.
+
 ## Verifying a launch actually worked
 
 `am start` printing `Starting: Intent {…}` means the intent was dispatched — **not** that the app is
@@ -172,7 +201,7 @@ Mirrors PLAN.md §7 — change them in both places or they drift.
 |---|---|
 | 0 — Foundation | Any one device ✅ *(done on G10)* |
 | 1 — Core model & API | None required ✅ *(done anyway on NA5C)* |
-| 2 — Generic engine | A generic stylus tablet: S26U and/or MIP11 |
+| 2 — Generic engine | A generic stylus tablet: S26U and/or MIP11 ✅ *(done on MIP11)* |
 | 3 — Tooling & render fidelity | Same generic tablet |
 | 4 — Onyx adapter | G102 **and** one colour panel (NA5C or P2P) |
 | 5 — Supernote adapter | Nomad, plus Manta if present |

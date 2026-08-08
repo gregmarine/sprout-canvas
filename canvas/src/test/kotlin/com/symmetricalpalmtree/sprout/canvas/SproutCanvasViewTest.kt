@@ -17,6 +17,7 @@ import com.symmetricalpalmtree.sprout.canvas.engine.EngineRegistry
 import com.symmetricalpalmtree.sprout.canvas.engine.InkEngine
 import com.symmetricalpalmtree.sprout.canvas.engine.InkEngineFactory
 import com.symmetricalpalmtree.sprout.canvas.engine.InkEngineHost
+import com.symmetricalpalmtree.sprout.canvas.engine.NoOpInkEngineFactory
 import com.symmetricalpalmtree.sprout.canvas.engine.PenFidelity
 import com.symmetricalpalmtree.sprout.canvas.engine.RepaintReason
 import com.symmetricalpalmtree.sprout.canvas.model.CaptureInfo
@@ -122,8 +123,10 @@ class SproutCanvasViewTest {
     // --- Engine wiring ------------------------------------------------------------------------
 
     @Test
-    fun `a canvas with no engines registered runs the stub`() {
-        assertEquals(EngineIds.NO_OP, canvas().engineInfo.id)
+    fun `a canvas with no engines registered runs the generic engine`() {
+        // The software engine is the last resort, not the stub: a host with no vendor adapter still
+        // gets a canvas that captures and draws.
+        assertEquals(EngineIds.GENERIC, canvas().engineInfo.id)
     }
 
     @Test
@@ -141,7 +144,7 @@ class SproutCanvasViewTest {
         view.listener = recorder
         root.addView(view, FrameLayout.LayoutParams(CANVAS_WIDTH, CANVAS_HEIGHT))
         idle()
-        assertEquals(listOf(EngineIds.NO_OP), recorder.engines.map { it.id })
+        assertEquals(listOf(EngineIds.GENERIC), recorder.engines.map { it.id })
     }
 
     @Test
@@ -287,9 +290,11 @@ class SproutCanvasViewTest {
 
     @Test
     fun `arming an eraser mode the engine does not implement is rejected at the call site`() {
-        // The stub engine implements nothing, which makes it a convenient stand-in for the AREA and
-        // PIXEL modes that are declared but unsupported everywhere in v1.
+        // The stub engine implements no eraser at all, which makes it a convenient stand-in for the
+        // AREA and PIXEL modes that are declared but unsupported everywhere in v1.
+        EngineRegistry.register(NoOpInkEngineFactory)
         val view = canvas()
+        view.enginePreference = EngineIds.NO_OP
         val failure = runCatching { view.eraser = EraserSpec(EraserMode.STROKE) }.exceptionOrNull()
         assertTrue(failure is IllegalArgumentException)
         assertEquals(null, view.eraser)
@@ -308,6 +313,7 @@ class SproutCanvasViewTest {
     @Test
     fun `switching to an engine that cannot honour the armed eraser disarms it`() {
         EngineRegistry.register(RecordingFactory("generic", priority = 0))
+        EngineRegistry.register(NoOpInkEngineFactory)
         val view = canvas()
         view.eraser = EraserSpec(EraserMode.STROKE)
 
@@ -348,6 +354,31 @@ class SproutCanvasViewTest {
         idle()
         assertEquals(listOf(TOOLBAR_ZONE), factory.engine!!.zones.last())
         assertEquals(listOf(TOOLBAR_ZONE), view.activeExclusionZones())
+    }
+
+    @Test
+    fun `hiding a tracked view stops it excluding anything`() {
+        // Found on a Wacom Movink Pad: the Lab reported two armed zones with one overlay on screen.
+        // A view set to GONE is never laid out, so its own layout listener never fires and its zone
+        // was left armed — a dead region on the canvas exactly where a dismissed popup used to be,
+        // which nothing on screen explains and no amount of tapping fixes.
+        val factory = RecordingFactory("generic", priority = 0)
+        EngineRegistry.register(factory)
+        val view = canvas()
+        val toolbar = View(activity)
+        root.addView(toolbar, FrameLayout.LayoutParams(60, 20))
+        view.addExclusionZone(toolbar, id = "toolbar")
+        idle()
+        assertEquals(1, view.activeExclusionZones().size)
+
+        toolbar.visibility = View.GONE
+        idle()
+
+        assertTrue("the zone survived its view being hidden", view.activeExclusionZones().isEmpty())
+
+        toolbar.visibility = View.VISIBLE
+        idle()
+        assertEquals(1, view.activeExclusionZones().size)
     }
 
     @Test

@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The Device report.
+
+    The canvas at the bottom is not decoration: the observed-range section is empty until somebody
+    writes on it, and "what the digitizer actually sent" is the half of this report that cannot be
+    read out of an API.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/paper_white"
+    android:orientation="vertical"
+    android:padding="12dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_vertical"
+            android:layout_weight="1"
+            android:text="@string/screen_device_report"
+            android:textColor="@color/ink_black"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/refreshButton"
+            style="@style/LabCompactButton"
+            android:text="@string/action_refresh" />
+
+        <Button
+            android:id="@+id/clearButton"
+            style="@style/LabCompactButton"
+            android:text="@string/action_clear" />
+    </LinearLayout>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="3">
+
+        <TextView
+            android:id="@+id/deviceReport"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:textColor="@color/ink_black"
+            android:textIsSelectable="true"
+            android:textSize="11sp" />
+    </ScrollView>
+
+    <TextView
+        style="@style/LabHint"
+        android:text="@string/device_report_hint" />
+
+    <com.symmetricalpalmtree.sprout.canvas.SproutCanvasView
+        android:id="@+id/canvas"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="4dp"
+        android:layout_weight="2"
+        android:background="@drawable/canvas_frame" />
+</LinearLayout>

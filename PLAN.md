@@ -496,10 +496,21 @@ release and whenever a renderer changes — never as a gate on routine builds. E
 environment it was generated in, and regeneration is a single deliberate command.
 
 **Decided empirically in Phase 2: Robolectric, in `NATIVE` graphics mode** (R1, §10.4). Both tiers
-render the same 18 scenes from one shared definition, and on a Wacom Movink Pad 11 sixteen of the
-eighteen came back byte-identical to the JVM — the other two differing by one unit on one channel.
-The instrumented tier renders the identical scenes and remains as an on-demand cross-check, because
-either environment can move underneath the other. Written up in `docs/golden-tier.md`.
+render the same scenes from one shared definition, and on a Wacom Movink Pad 11 sixteen of the
+eighteen scenes that existed then came back byte-identical to the JVM — the other two differing by
+one unit on one channel. The instrumented tier renders the identical scenes and remains as an
+on-demand cross-check, because either environment can move underneath the other. Written up in
+`docs/golden-tier.md`.
+
+Phase 3 grew the suite to **33 scenes**. Two of the additions are worth knowing about when adding
+more:
+
+- **A scene holds a *list* of strokes.** The interesting failures in a drawing library are
+  compositing failures, and one stroke on white cannot express one. The suite shipped for two phases
+  with a scene called `highlighter-over-ink` that drew a highlighter onto a blank bitmap.
+- **Width ladders, off the real `SproutWidth` rungs.** A texture pen's appearance is a function of
+  its width in *both* directions (§5.13), so a suite rendering every pen at exactly one width is
+  blind to the ends of the range where the interesting things happen.
 
 ### 4.2 Instrumented tests — `src/androidTest/`, real device or emulator
 
@@ -794,6 +805,36 @@ code that is actually fine.
   partly visible, and the limit rect correctly clips to the visible frame. Test fixtures should sit
   inside the screen unless the clipping itself is what is under test.
 
+### 5.13 A texture pen's appearance is a function of its width, at both ends
+
+Found in Phase 3 by adding width ladders to the golden suite, then confirmed on the Movink Pad with
+a real pen (`docs/conformance/mip11-2026-08-08-phase3.md`). Neither end is visible if every pen is
+only ever rendered at one width, which is how the suite was built in Phase 2.
+
+The nominal-width multipliers (§5.7 — `CHARCOAL ×5`, `BRUSH ×2`) exist because a texture pen drawn
+at its nominal width has no room for its grain and comes out solid. That is true, and the multiplier
+fixes it in the middle of the ladder. It also creates the opposite problem at the top and does not
+reach far enough at the bottom:
+
+- **At `XXL` (12 dp) the grain becomes discrete circles.** Stamp size scales linearly with drawn
+  width and nothing caps it, so charcoal at 12 dp × 5 draws 120 px-wide ink whose stamps are large
+  enough to count individually. It reads as speckle, not as charcoal. `PenTuning.grainScale` was
+  added in Phase 2 for exactly this failure mode and solves it at 3 dp only.
+- **At `HAIRLINE` (0.5 dp) pencil and charcoal swap character.** The pencil's ×2 leaves ~2 px of
+  drawn width and produces a clean grainless line; charcoal's ×5 leaves ~5 px and still shows fine
+  texture. So the coarser pen is the *only* one with grain at the narrow end — backwards, and purely
+  arithmetic.
+
+Both are pinned by goldens (`width-pencil-*`, `width-charcoal-*`), so any re-tuning shows up in a
+diff. **Not fixed in Phase 3 on purpose** — the software renderer is the only reference that exists
+until the vendor paths land, and §7's Phase 3 note is explicit that tuning it against preference
+alone means tuning twice. This is the material the Phase 4/5 pass should start from.
+
+Separately, and not reproducible offline: **texture pens lag the pen for the first moment of a
+stroke** and then keep up. A golden renders a finished stroke and says nothing about the rate at
+which it appeared, so this needs the deferred performance harness (§9). The texture renderer places
+far more primitives per unit length than any other, so a first-stroke cost there is plausible.
+
 ---
 
 ## 6. Cross-cutting conventions
@@ -984,6 +1025,13 @@ round-trip in the instrumented suite.
 **Device protocol.** Generic stylus tablet. Draw one stroke per pen, screenshot, attach to the
 conformance report. (Committed content is capturable — no `CONFIRM` items needed yet.)
 
+> **Done on the Wacom Movink Pad 11, with the real pen** —
+> `docs/conformance/mip11-2026-08-08-phase3.md`. That mattered: `adb shell input stylus` carries no
+> pressure, so the criterion *"pressure genuinely modulates `FOUNTAIN`/`BRUSH`"* is not automatable
+> on any device and a human had to answer it. The golden suite grew 18 → 33 scenes; the curves were
+> **not** tuned, per the note above. Two defects the new width ladders found are recorded in §5.13
+> and left as the Phase 4/5 tuning pass's starting material.
+
 ---
 
 ### Phase 4 — Onyx adapter (BOOX)
@@ -1135,7 +1183,7 @@ Update the row at the end of each phase, then commit and push.
 | 0 | Foundation & build scaffolding | ✅ Complete | `2dc9949` | 2026-08-07 | Build + 4 JVM tests green from clean; `publishToMavenLocal` resolves `com.symmetricalpalmtree.sprout:canvas:0.1.0-SNAPSHOT` (AAR + sources + MIT POM); Lab installs, launches and is findable by name on **G10**. Three things worth carrying forward: (1) Java 17 comes from `jvmToolchain(17)`, **not** an `org.gradle.java.home` pin — an absolute JDK path in a committed file breaks every other machine; (2) explicit API mode was verified **by probe**, not assumed — it did not appear in the compiler args when grepped, and has historically been unreliable on Android variants; (3) BOOX disables freshly sideloaded APKs — see §5.9. |
 | 1 | Core model & public API contract | ✅ Complete | `ac9ce38` | 2026-08-07 | 151 JVM tests green (144 `:canvas`, 7 `:lab`); `build test` and `publishToMavenLocal` clean; explicit API mode re-verified by probe (a bare `fun f() = 42` fails the build). Four contract decisions taken with the user, all recorded in §10.3. Five things worth carrying forward: (1) **`StrokeSamples.channels` is derived, not passed** — §3.5 sketched it as a constructor parameter, but a mask supplied separately from the data it describes is a mask that can disagree with it; deriving deletes the failure mode. (2) **The vendor tables are `@RestrictTo(LIBRARY_GROUP)`** — adapters are separate Gradle modules so `internal` cannot reach them, but the Onyx style ints and Supernote pen codes must not become frozen public API; `PenFidelity` and `capabilities.fidelity()` stay fully public because that is what a host actually needs. (3) **`androidx.annotation` moved to `api`** — `@ColorInt` / `@IntDef` / `@MainThread` / `@RestrictTo` appear on the public surface, and an annotation a consumer's compiler cannot resolve does nothing. Still exactly one dependency. (4) **`-Xannotation-default-target=param-property`** is on for `:canvas`; without it a constructor-property annotation lands on the value parameter only, so a consumer reading the getter sees nothing. Lint then immediately caught a real `@IntDef` gap (`InkChannel.NONE` had to be declared as a legal value) — the annotations are load-bearing, not decorative. (5) **`SproutLog` was created here, not in Phase 2** — D11's missing-`initialize` error needed it. §3.9 corrected: `findViewTreeLifecycleOwner()` cannot be used, it needs `androidx.lifecycle`. Build environment: this machine's default `java` is now JDK 26, which Gradle 8.14 cannot run on — see §5.12. **Device-verified on NA5C** (not required by this phase): the report reads `initialized: true`, no adapters found, fallback engine selected, `app:sproutPen="fountain"` honoured from XML, `1 registered, 1 active` exclusion zone, and Ingest → Round-trip gives `strokes: 2 · round trip: identical`. Two things only hardware could show: (a) **`pm enable` loses a race with Onyx** — the NA5C re-disabled the package after a successful enable, so enable must be issued in the *same device shell* as the launch, every launch (§5.9 updated, skill updated); (b) the Lab's device report refreshed from `onResume` alone showed `0 active` zones with the toolbar plainly on the canvas, because zone computation is coalesced to one posted pass per layout and `onResume` runs before the first layout — now also refreshed from `onWindowFocusChanged`. That was a bug in the diagnostic, not the tracker, which is exactly the sort of thing that sends a later session hunting a fault that is not there. |
 | 2 | Generic engine: capture and render | ✅ Complete | `8c10fcb` | 2026-08-08 | **The canvas draws.** 255 JVM tests (241 `:canvas`, 14 `:lab`) + 20 instrumented tests on the MIP11 (0 skipped, so every channel assertion actually ran) + an 18-scene golden suite. Scope: at the user's direction Phase 2 delivered **all nine software renderers**, not the two the phase strictly needed — so most of Phase 3 landed here (see the Phase 3 note below). **R1 is resolved** — Robolectric with `NATIVE` graphics hosts the golden suite; 16 of 18 scenes are byte-identical to the Wacom tablet and the other two differ by 1 on one channel (`docs/golden-tier.md`). Seven things worth carrying forward: (1) **The `InkEngineHost` SPI gained `onEraseEnded()`** — one eraser swipe is one action to a user, so the strokes it removed are reported once at the gesture boundary rather than in batches, and a hardware engine gets exactly one panel repaint out of it instead of one per move event. (2) **Renderers are split into a pure-Kotlin solver and a thin `android.graphics` shell.** Taper curves, nib angle, dash cadence, decimation and grain determinism are all asserted in plain JUnit in milliseconds on every build; only *appearance* needs pixels. (3) **The renderer registry is per canvas, not global** — two canvases in one process can run different engines, which is exactly how the harness compares the hardware and software ink paths. (4) **Texture grain must be seeded from the stroke's own id**, or `setStrokes(getStrokes())` stops being a visual no-op for the pencil and charcoal alone — a G4 failure that would get blamed on the ingest path. (5) **Grain scale has to be decoupled from the width multiplier**: charcoal's ×5 scaled its stamps up with it until they read as a row of circles. (6) **A calligraphy nib modelled as a zero-thickness line draws nothing at all** when the stroke runs along its own angle — caught by a golden, not by geometry. (7) **Robolectric's default graphics mode records draw calls without executing them**, so any pixel test needs `@GraphicsMode(NATIVE)` or it passes forever while asserting nothing. Four bugs were found only by putting it on hardware — all fixed, all now covered by a test, all recorded in §5.10–§5.11 and `docs/conformance/mip11-2026-08-08.md`. |
-| 3 | Tooling & rendering fidelity | 🟡 Mostly delivered in Phase 2 | | | All nine software renderers, the pressure/velocity curves, the per-pen width multipliers, highlighter alpha, the colour chokepoint, `PenFidelity` reporting and the Lab's Tools screen all landed in Phase 2. **Checked with a real pen on the Movink Pad — every pen reads as what its name claims, so the reference the vendor paths will be tuned against is sound.** What remains: per-pen golden coverage beyond the 18 scenes already committed, and the honest re-examination of `GenericPenTable` — every pen currently reports `NATIVE`, which is right for a reference renderer but should be re-confirmed once the vendor paths exist to be compared against. |
+| 3 | Tooling & rendering fidelity | ✅ Complete | `PENDING` | 2026-08-08 | **The renderers were delivered in Phase 2; this phase established what they actually look like.** Deliverables had already landed — all nine renderers, the curves, the multipliers, highlighter alpha, the colour chokepoint, `PenFidelity`, the Lab's Tools screen — so the work here was the two named remnants plus the device protocol, and the pen curves were **deliberately not tuned** (see §7's Phase 3 note; reaffirmed by the user this session). 255 JVM tests green; golden suite **18 → 33 scenes**. Five things worth carrying forward: (1) **A golden scene now holds a *list* of strokes.** `highlighter-over-ink` had drawn a highlighter onto a *blank bitmap* for two phases — a scene named for a blend it never performed, passing the whole time. Compositing is where a drawing library actually fails, and one stroke on white cannot express it. (2) **Width ladders found a real defect the single-width scenes were blind to** — texture grain becomes countable circles at `XXL` and pencil/charcoal swap character at `HAIRLINE`, both confirmed on hardware with a real pen. Recorded in §5.13 with pictures, pinned by goldens, left for the Phase 4/5 tuning pass to start from rather than fixed against preference. (3) **`CommittedLayer`'s software branch had no pixel coverage at all**, and it is the branch an Onyx panel repaint and every host screenshot take (§3.8). Losing it produces no exception and no geometry change — just a blank panel, in Phase 4, with nothing to point at. Both tiers now assert the committed path and the direct path are byte-identical. (4) **`GenericPenTable` stays all-`NATIVE`, re-examined and left alone on purpose.** `PenFidelity` describes how faithfully an *engine* reproduces a pen, not how good the ink looks; on an ordinary tablet there is no other path for the software renderer to be worse than. A table where every row says the same thing invites the suspicion nobody decided it, so the reasoning and what would overturn it are now in its KDoc. (5) **The calligraphy nib is the strongest result on the device sheet** — the tester added a descending curl on the reasoning that a nib must be proven in both directions, and thick-across/thin-along is exactly what came out. Device protocol run on **MIP11 with the real pen in a real hand**, which is the only way the pressure criterion is answerable at all: `docs/conformance/mip11-2026-08-08-phase3.md`, with both stroke sheets committed under `docs/conformance/images/`. |
 | 4 | Onyx adapter (BOOX) | ⬜ Not started | | | |
 | 5 | Supernote adapter (Ratta) | ⬜ Not started | | | |
 | 6 | Conformance harness & regression | ⬜ Not started | | | |

@@ -116,6 +116,29 @@ class GoldenImageTest {
         }
     }
 
+    @Test
+    fun `the committed layer's software branch matches direct rendering`() {
+        // A RenderNode can only be drawn onto a hardware canvas, so the committed layer carries a
+        // software branch that redraws the content instead. That branch is what Onyx's
+        // `EpdController.handwritingRepaint` and every host screenshot go through (PLAN.md §3.8),
+        // and losing it produces no exception and no geometry change — just a blank panel. This is
+        // the assertion that would notice.
+        val committedScenes = GoldenScenes.scenes().filter { it.path == GoldenScenes.Path.COMMITTED }
+        assertTrue("no scene exercises the committed path", committedScenes.isNotEmpty())
+
+        committedScenes.forEach { scene ->
+            // Same name, so the same grain seeds: the only difference between the two renderings is
+            // the path taken to the pixels.
+            val direct = GoldenScenes.render(GoldenScenes.Scene(scene.name, scene.layers))
+            val committed = GoldenScenes.render(scene)
+            assertTrue(
+                "${scene.name} drew differently through the committed layer: " +
+                    GoldenScenes.compare(direct, committed),
+                direct.sameAs(committed),
+            )
+        }
+    }
+
     private fun write(bitmap: Bitmap, file: File) {
         file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }

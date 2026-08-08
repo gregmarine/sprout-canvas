@@ -73,6 +73,25 @@ class GoldenImageInstrumentedTest {
     }
 
     @Test
+    fun theCommittedLayerSoftwareBranchMatchesDirectRenderingOnDevice() {
+        // Worth asserting on hardware and not only on the JVM: this is the branch an e-ink panel
+        // repaint takes (PLAN.md §3.8), and `RenderNode` behaviour is exactly the kind of platform
+        // guarantee that vendor firmware has been wrong about before.
+        val committedScenes = GoldenScenes.scenes().filter { it.path == GoldenScenes.Path.COMMITTED }
+        assertTrue("no scene exercises the committed path", committedScenes.isNotEmpty())
+
+        committedScenes.forEach { scene ->
+            val direct = GoldenScenes.render(GoldenScenes.Scene(scene.name, scene.layers))
+            val committed = GoldenScenes.render(scene)
+            assertTrue(
+                "${scene.name} drew differently through the committed layer on this device: " +
+                    GoldenScenes.compare(direct, committed),
+                direct.sameAs(committed),
+            )
+        }
+    }
+
+    @Test
     fun reportDifferenceFromTheCommittedGoldens() {
         val output = File(instrumentation.targetContext.getExternalFilesDir(null), "golden")
         output.mkdirs()

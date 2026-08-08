@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Sprout Canvas Lab</string>
+    <string name="library_version">sprout-canvas %1$s</string>
+    <string name="phase_zero_note">Phase 0 — build scaffolding.\nThe canvas arrives in Phase 2.</string>
+</resources>

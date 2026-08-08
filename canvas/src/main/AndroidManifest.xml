@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    sprout-canvas requires no permissions, declares no components, and contributes nothing to the
+    consuming app's manifest. Stylus input arrives through the ordinary view/input pipeline, and
+    the vendor hardware paths are reached through an explicit SproutCanvas.initialize(application)
+    call rather than an auto-init ContentProvider (PLAN.md D11).
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" />

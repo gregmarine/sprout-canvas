@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Sprout Canvas Lab launcher icon: a canvas frame with a stroke written across it.
+
+    Drawn as flat outlines with no gradient, shadow or fill detail, because it has to stay legible
+    after a 1-bit dither on a monochrome e-ink launcher as well as on an LCD.
+
+    Adaptive-icon geometry: the 108x108 canvas has a 72x72 safe zone centred at 54,54 (i.e. inset
+    18 on every side). Everything below stays inside roughly 26..82 so no launcher mask clips it.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- The canvas: a rounded rectangle, drawn as an outline. -->
+    <path
+        android:pathData="M32,30 L76,30 A4,4 0 0 1 80,34 L80,74 A4,4 0 0 1 76,78 L32,78 A4,4 0 0 1 28,74 L28,34 A4,4 0 0 1 32,30 Z"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="4"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000" />
+
+    <!-- The stroke: a handwritten upstroke, thick-to-thin like real pressure-modulated ink. -->
+    <path
+        android:pathData="M38,66 C46,66 48,44 54,44 C60,44 60,64 66,64 C69,64 70,58 70,54"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000" />
+</vector>

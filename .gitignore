@@ -1,0 +1,66 @@
+# ── Android build output ──────────────────────────────────────────────────────
+build/
+**/build/
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+
+# ── Gradle ────────────────────────────────────────────────────────────────────
+.gradle/
+**/.gradle/
+gradle-app.setting
+local.properties
+**/local.properties
+# The wrapper jar IS committed — it is how a fresh clone bootstraps a build at the pinned
+# Gradle version without a system Gradle installed.
+!gradle/wrapper/gradle-wrapper.jar
+
+# ── Android Studio / IntelliJ ─────────────────────────────────────────────────
+.idea/
+**/.idea/
+*.iml
+**/*.iml
+*.ipr
+*.iws
+out/
+captures/
+.cxx/
+
+# ── Kotlin ────────────────────────────────────────────────────────────────────
+.kotlin/
+**/.kotlin/
+
+# ── Keystore / signing ────────────────────────────────────────────────────────
+*.jks
+*.keystore
+key.properties
+**/key.properties
+
+# ── macOS ─────────────────────────────────────────────────────────────────────
+.DS_Store
+**/.DS_Store
+.AppleDouble
+.LSOverride
+
+# ── Editors ───────────────────────────────────────────────────────────────────
+.vscode/
+*.swp
+*.swo
+*~
+
+# ── Logs & local scratch ──────────────────────────────────────────────────────
+*.log
+
+# ── Claude Code local tooling ─────────────────────────────────────────────────
+# Skills are shared; everything else under .claude is per-machine session state.
+.claude/*
+!.claude/skills/
+!.claude/skills/**
+
+# ── Test artefacts ────────────────────────────────────────────────────────────
+# Golden reference images ARE committed (docs/conformance and the golden suite are the
+# regression baseline). Only the failure diffs a run produces are ignored.
+**/build/reports/
+**/golden-diffs/

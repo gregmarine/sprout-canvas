@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        No ActionBar: the Lab's screens are instruments, and on e-ink every band of chrome costs
+        panel area and a refresh. Screens supply their own headers where they need one.
+    -->
+    <style name="Theme.SproutCanvasLab" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="android:windowBackground">@color/paper_white</item>
+        <item name="android:statusBarColor">@color/paper_white</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>

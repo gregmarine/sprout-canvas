@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    E-ink-first palette. The Lab runs on monochrome panels as often as colour ones, so its own
+    chrome stays black on white; anything that needs to read as secondary gets smaller, not greyer.
+    (ink_light is for text meant NOT to be read — hints and disabled controls.)
+-->
+<resources>
+    <color name="ink_black">#FF000000</color>
+    <color name="paper_white">#FFFFFFFF</color>
+    <color name="ink_light">#FF888888</color>
+</resources>

@@ -1018,8 +1018,8 @@ Update the row at the end of each phase, then commit and push.
 
 | Phase | Name | Status | Commit | Date | Notes |
 |---:|---|---|---|---|---|
-| — | Planning | ✅ Complete | _(pending)_ | 2026-08-07 | This document |
-| 0 | Foundation & build scaffolding | ⬜ Not started | | | |
+| — | Planning | ✅ Complete | `2dc9949` | 2026-08-07 | This document |
+| 0 | Foundation & build scaffolding | ✅ Complete | `2dc9949` | 2026-08-07 | Build + 4 JVM tests green from clean; `publishToMavenLocal` resolves `com.symmetricalpalmtree.sprout:canvas:0.1.0-SNAPSHOT` (AAR + sources + MIT POM); Lab installs, launches and is findable by name on **G10**. Three things worth carrying forward: (1) Java 17 comes from `jvmToolchain(17)`, **not** an `org.gradle.java.home` pin — an absolute JDK path in a committed file breaks every other machine; (2) explicit API mode was verified **by probe**, not assumed — it did not appear in the compiler args when grepped, and has historically been unreliable on Android variants; (3) BOOX disables freshly sideloaded APKs — see §5.9. |
 | 1 | Core model & public API contract | ⬜ Not started | | | |
 | 2 | Generic engine: capture and render | ⬜ Not started | | | |
 | 3 | Tooling & rendering fidelity | ⬜ Not started | | | |

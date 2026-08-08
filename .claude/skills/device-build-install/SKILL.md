@@ -26,8 +26,8 @@ With several devices attached, `installDebug` is ambiguous — build once, then 
 ```sh
 ./gradlew :lab:assembleDebug
 adb -s <serial> install -r lab/build/outputs/apk/debug/lab-debug.apk
-adb -s <serial> shell pm enable com.symmetricalpalmtree.sprout.canvas.lab.dev   # BOOX — see below
-adb -s <serial> shell am start -n com.symmetricalpalmtree.sprout.canvas.lab.dev/com.symmetricalpalmtree.sprout.canvas.lab.LabActivity
+# BOOX: enable and launch in ONE device shell — Onyx re-disables between separate adb calls.
+adb -s <serial> shell 'pm enable com.symmetricalpalmtree.sprout.canvas.lab.dev && am start -n com.symmetricalpalmtree.sprout.canvas.lab.dev/com.symmetricalpalmtree.sprout.canvas.lab.LabActivity'
 ```
 
 Install all requested devices in a single shell block. If the user says devices are ready, **skip
@@ -61,6 +61,17 @@ lastDisabledCaller: com.onyx
 ```sh
 adb -s <serial> shell pm enable com.symmetricalpalmtree.sprout.canvas.lab.dev
 ```
+
+**⚠ Enabling once is not enough — Onyx re-disables it.** Seen on the **NA5C**: `pm enable` reported
+`new state: enabled` and the first launch worked, then a later `am start` failed with `Error type 3`
+and `dumpsys` showed `enabled=3 · lastDisabledCaller: com.onyx` all over again. Separate `adb` calls
+leave Onyx a window to undo the enable. Put both in **one device-side shell**:
+
+```sh
+adb -s <serial> shell 'pm enable com.symmetricalpalmtree.sprout.canvas.lab.dev && am start -n com.symmetricalpalmtree.sprout.canvas.lab.dev/com.symmetricalpalmtree.sprout.canvas.lab.LabActivity'
+```
+
+Enable immediately before **every** launch, not once after install.
 
 **Do not go debugging the manifest, namespace, or `applicationIdSuffix` on this error.** Two commands
 separate package state from a code bug in seconds:
@@ -123,7 +134,7 @@ ship.
 | Device | Nickname | Serial | Panel |
 |---|---|---|---|
 | BOOX Go 10.3 Gen 2 | **G102** | `b7a46e13` | 10.3" mono — **Onyx flagship target** |
-| BOOX NoteAir5C | **NA5C** | `92c16533` | 10.3" Kaleido colour |
+| BOOX NoteAir5C | **NA5C** | `92c16533` ✅ | 10.3" Kaleido colour |
 | BOOX Note Max | **MAX** | `6325773d` | 13.3" mono |
 | BOOX Go 6 Gen II | **G6** | `DAF86F61` | 6" mono |
 | BOOX Palma2 Pro | **P2P** | `287d2364` | 6.1" colour — **narrowest, `sw439dp`** |
@@ -160,7 +171,7 @@ Mirrors PLAN.md §7 — change them in both places or they drift.
 | Phase | Devices |
 |---|---|
 | 0 — Foundation | Any one device ✅ *(done on G10)* |
-| 1 — Core model & API | None required |
+| 1 — Core model & API | None required ✅ *(done anyway on NA5C)* |
 | 2 — Generic engine | A generic stylus tablet: S26U and/or MIP11 |
 | 3 — Tooling & render fidelity | Same generic tablet |
 | 4 — Onyx adapter | G102 **and** one colour panel (NA5C or P2P) |

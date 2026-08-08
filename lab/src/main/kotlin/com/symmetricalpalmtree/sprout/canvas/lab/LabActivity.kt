@@ -112,6 +112,20 @@ class LabActivity : AppCompatActivity() {
         refreshReport()
     }
 
+    /**
+     * Refresh again once the window has settled.
+     *
+     * `onResume` runs before the first layout, and exclusion zones cannot be computed until the
+     * canvas has a size — the library coalesces zone changes into one posted recomputation per
+     * layout pass. Reporting from `onResume` alone therefore shows "0 active" with a toolbar
+     * plainly sitting on the canvas, which on the one screen meant to be a trustworthy diagnostic
+     * would send someone hunting a bug in the exclusion tracker that is not there.
+     */
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) refreshReport()
+    }
+
     private fun note(message: String) {
         lastEvent = message
         refreshReport()

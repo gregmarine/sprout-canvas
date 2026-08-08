@@ -705,6 +705,19 @@ software — the BOOX app-management layer disabled the package on install. The 
 adb -s <serial> shell pm enable <applicationId>
 ```
 
+**⚠ `pm enable` can lose a race with Onyx, and does.** Observed on the **NA5C**, Phase 1: `pm enable`
+reported `new state: enabled`, the first `am start` succeeded — and a later `am start` failed with
+`Error type 3` again, with `dumpsys` showing `enabled=3` and `lastDisabledCaller: com.onyx` a second
+time. Onyx re-disabled the package *after* it had been enabled. Running the two as separate `adb`
+invocations leaves a window for that; issuing them in **one device-side shell** closes it:
+
+```sh
+adb -s <serial> shell 'pm enable <applicationId> && am start -n <applicationId>/<activity>'
+```
+
+So the rule is not "enable once after install" but "enable immediately before every launch". Treat a
+BOOX launch failure as a package-state question even when you already enabled the package.
+
 **Why this matters beyond the annoyance:** the error message points at the *activity class*, so the
 natural reading is a manifest, namespace or `applicationIdSuffix` mistake — and the natural response
 is to go rewrite build config that was never wrong. Two checks settle it in seconds:
@@ -831,6 +844,12 @@ selection with fake probes; **exhaustive enum-coverage tests over the mapping an
 
 **Device protocol.** None required. The Lab's device-report screen shows the selected (stub) engine
 to prove the wiring, and can be checked on any device.
+
+*Done anyway on **NA5C** (BOOX NoteAir5C, Kaleido colour):* `initialized: true`, no adapters found,
+fallback engine selected and running, `app:sproutPen="fountain"` at 2 dp honoured from XML, the
+tracked toolbar reported as `1 registered, 1 active`, and Ingest → Round-trip giving
+`strokes: 2 · round trip: identical`. Two things surfaced that a JVM test could not have
+(see §8 and §5.9).
 
 ---
 
@@ -1050,7 +1069,7 @@ Update the row at the end of each phase, then commit and push.
 |---:|---|---|---|---|---|
 | — | Planning | ✅ Complete | `2dc9949` | 2026-08-07 | This document |
 | 0 | Foundation & build scaffolding | ✅ Complete | `2dc9949` | 2026-08-07 | Build + 4 JVM tests green from clean; `publishToMavenLocal` resolves `com.symmetricalpalmtree.sprout:canvas:0.1.0-SNAPSHOT` (AAR + sources + MIT POM); Lab installs, launches and is findable by name on **G10**. Three things worth carrying forward: (1) Java 17 comes from `jvmToolchain(17)`, **not** an `org.gradle.java.home` pin — an absolute JDK path in a committed file breaks every other machine; (2) explicit API mode was verified **by probe**, not assumed — it did not appear in the compiler args when grepped, and has historically been unreliable on Android variants; (3) BOOX disables freshly sideloaded APKs — see §5.9. |
-| 1 | Core model & public API contract | ✅ Complete | `ac9ce38` | 2026-08-07 | 151 JVM tests green (144 `:canvas`, 7 `:lab`); `build test` and `publishToMavenLocal` clean; explicit API mode re-verified by probe (a bare `fun f() = 42` fails the build). Four contract decisions taken with the user, all recorded in §10.3. Five things worth carrying forward: (1) **`StrokeSamples.channels` is derived, not passed** — §3.5 sketched it as a constructor parameter, but a mask supplied separately from the data it describes is a mask that can disagree with it; deriving deletes the failure mode. (2) **The vendor tables are `@RestrictTo(LIBRARY_GROUP)`** — adapters are separate Gradle modules so `internal` cannot reach them, but the Onyx style ints and Supernote pen codes must not become frozen public API; `PenFidelity` and `capabilities.fidelity()` stay fully public because that is what a host actually needs. (3) **`androidx.annotation` moved to `api`** — `@ColorInt` / `@IntDef` / `@MainThread` / `@RestrictTo` appear on the public surface, and an annotation a consumer's compiler cannot resolve does nothing. Still exactly one dependency. (4) **`-Xannotation-default-target=param-property`** is on for `:canvas`; without it a constructor-property annotation lands on the value parameter only, so a consumer reading the getter sees nothing. Lint then immediately caught a real `@IntDef` gap (`InkChannel.NONE` had to be declared as a legal value) — the annotations are load-bearing, not decorative. (5) **`SproutLog` was created here, not in Phase 2** — D11's missing-`initialize` error needed it. §3.9 corrected: `findViewTreeLifecycleOwner()` cannot be used, it needs `androidx.lifecycle`. Build environment: this machine's default `java` is now JDK 26, which Gradle 8.14 cannot run on — see §5.10. |
+| 1 | Core model & public API contract | ✅ Complete | `ac9ce38` | 2026-08-07 | 151 JVM tests green (144 `:canvas`, 7 `:lab`); `build test` and `publishToMavenLocal` clean; explicit API mode re-verified by probe (a bare `fun f() = 42` fails the build). Four contract decisions taken with the user, all recorded in §10.3. Five things worth carrying forward: (1) **`StrokeSamples.channels` is derived, not passed** — §3.5 sketched it as a constructor parameter, but a mask supplied separately from the data it describes is a mask that can disagree with it; deriving deletes the failure mode. (2) **The vendor tables are `@RestrictTo(LIBRARY_GROUP)`** — adapters are separate Gradle modules so `internal` cannot reach them, but the Onyx style ints and Supernote pen codes must not become frozen public API; `PenFidelity` and `capabilities.fidelity()` stay fully public because that is what a host actually needs. (3) **`androidx.annotation` moved to `api`** — `@ColorInt` / `@IntDef` / `@MainThread` / `@RestrictTo` appear on the public surface, and an annotation a consumer's compiler cannot resolve does nothing. Still exactly one dependency. (4) **`-Xannotation-default-target=param-property`** is on for `:canvas`; without it a constructor-property annotation lands on the value parameter only, so a consumer reading the getter sees nothing. Lint then immediately caught a real `@IntDef` gap (`InkChannel.NONE` had to be declared as a legal value) — the annotations are load-bearing, not decorative. (5) **`SproutLog` was created here, not in Phase 2** — D11's missing-`initialize` error needed it. §3.9 corrected: `findViewTreeLifecycleOwner()` cannot be used, it needs `androidx.lifecycle`. Build environment: this machine's default `java` is now JDK 26, which Gradle 8.14 cannot run on — see §5.10. **Device-verified on NA5C** (not required by this phase): the report reads `initialized: true`, no adapters found, fallback engine selected, `app:sproutPen="fountain"` honoured from XML, `1 registered, 1 active` exclusion zone, and Ingest → Round-trip gives `strokes: 2 · round trip: identical`. Two things only hardware could show: (a) **`pm enable` loses a race with Onyx** — the NA5C re-disabled the package after a successful enable, so enable must be issued in the *same device shell* as the launch, every launch (§5.9 updated, skill updated); (b) the Lab's device report refreshed from `onResume` alone showed `0 active` zones with the toolbar plainly on the canvas, because zone computation is coalesced to one posted pass per layout and `onResume` runs before the first layout — now also refreshed from `onWindowFocusChanged`. That was a bug in the diagnostic, not the tracker, which is exactly the sort of thing that sends a later session hunting a fault that is not there. |
 | 2 | Generic engine: capture and render | ⬜ Not started | | | |
 | 3 | Tooling & rendering fidelity | ⬜ Not started | | | |
 | 4 | Onyx adapter (BOOX) | ⬜ Not started | | | |

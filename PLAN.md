@@ -450,8 +450,13 @@ Onyx adapter may substitute SDK `NeoPen*` renderers for closer path-A/path-B agr
 ### 3.9 Lifecycle and multi-canvas safety
 
 The library owns its own lifecycle wherever it can: `onAttachedToWindow` / `onDetachedFromWindow` /
-`onWindowFocusChanged`, plus `findViewTreeLifecycleOwner()` when one is available. Explicit
-`resume()` / `pause()` / `releaseForHandoff()` remain as escape hatches for hosts that need them.
+`onWindowFocusChanged`. Explicit `resume()` / `pause()` / `releaseForHandoff()` remain as escape
+hatches for hosts whose navigation does not line up with those.
+
+> **Corrected in Phase 1:** this section originally also named `findViewTreeLifecycleOwner()`. That
+> lives in `androidx.lifecycle:lifecycle-runtime`, which `:canvas` does not depend on and must not —
+> the zero-dependency rule is a decision, not an oversight. The three `View` callbacks cover every
+> case the library can observe on its own, and the explicit hooks cover the rest.
 
 **The process-global hazard.** On BOOX the raw-drawing pipeline is a single process-global hardware
 resource, and Android runs an incoming screen's open *before* the outgoing screen's close — so a late
@@ -709,6 +714,31 @@ and the `enabled=` field in `dumpsys package`.
 
 Fold `pm enable` into every BOOX install step, and treat "activity does not exist" on a BOOX as a
 package-state question before it is a code question.
+
+### 5.10 Build and test environment
+
+Not device quirks, but they cost time in the same way — each one presents as a mysterious failure in
+code that is actually fine.
+
+- **Gradle 8.14 cannot run on JDK 26.** Observed in Phase 1 when the machine's default `java` moved
+  to Temurin 26: every task fails before compiling anything, with the uniquely unhelpful message
+  `* What went wrong: 26` — an `IllegalArgumentException` from `JavaVersion.parse` inside the Kotlin
+  DSL script compiler. It looks like a corrupt build script; it is a JVM the toolchain has never
+  heard of. `jvmToolchain(17)` does **not** help: it selects the JDK that compiles the *code*, not
+  the one that runs Gradle itself.
+  **Fix:** run Gradle on JDK 17 — `JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home ./gradlew …`,
+  or set `org.gradle.java.home` in **`~/.gradle/gradle.properties`** (machine-local, not committed).
+  Never in the repo's own `gradle.properties`: an absolute JDK path there works on exactly one
+  machine.
+- **Robolectric runs a real layout pass, and it wins.** A hand-rolled `view.measure(...)` +
+  `view.layout(...)` on a view inside a parent is silently overwritten when the framework lays the
+  hierarchy out on the next idle — the view ends up at the parent's size, not the requested one.
+  Tests that assert on `width`/`height`, bounds or exclusion geometry must set real `LayoutParams`
+  and let the pass apply them. The symptom is an assertion failure quoting the *screen* size, which
+  reads like a bug in the geometry code rather than in the fixture.
+- **Robolectric's default screen is small (320×414).** A canvas larger than it is genuinely only
+  partly visible, and the limit rect correctly clips to the visible frame. Test fixtures should sit
+  inside the screen unless the clipping itself is what is under test.
 
 ---
 
@@ -1020,7 +1050,7 @@ Update the row at the end of each phase, then commit and push.
 |---:|---|---|---|---|---|
 | — | Planning | ✅ Complete | `2dc9949` | 2026-08-07 | This document |
 | 0 | Foundation & build scaffolding | ✅ Complete | `2dc9949` | 2026-08-07 | Build + 4 JVM tests green from clean; `publishToMavenLocal` resolves `com.symmetricalpalmtree.sprout:canvas:0.1.0-SNAPSHOT` (AAR + sources + MIT POM); Lab installs, launches and is findable by name on **G10**. Three things worth carrying forward: (1) Java 17 comes from `jvmToolchain(17)`, **not** an `org.gradle.java.home` pin — an absolute JDK path in a committed file breaks every other machine; (2) explicit API mode was verified **by probe**, not assumed — it did not appear in the compiler args when grepped, and has historically been unreliable on Android variants; (3) BOOX disables freshly sideloaded APKs — see §5.9. |
-| 1 | Core model & public API contract | ⬜ Not started | | | |
+| 1 | Core model & public API contract | ✅ Complete | `PENDING` | 2026-08-07 | 151 JVM tests green (144 `:canvas`, 7 `:lab`); `build test` and `publishToMavenLocal` clean; explicit API mode re-verified by probe (a bare `fun f() = 42` fails the build). Four contract decisions taken with the user, all recorded in §10.3. Five things worth carrying forward: (1) **`StrokeSamples.channels` is derived, not passed** — §3.5 sketched it as a constructor parameter, but a mask supplied separately from the data it describes is a mask that can disagree with it; deriving deletes the failure mode. (2) **The vendor tables are `@RestrictTo(LIBRARY_GROUP)`** — adapters are separate Gradle modules so `internal` cannot reach them, but the Onyx style ints and Supernote pen codes must not become frozen public API; `PenFidelity` and `capabilities.fidelity()` stay fully public because that is what a host actually needs. (3) **`androidx.annotation` moved to `api`** — `@ColorInt` / `@IntDef` / `@MainThread` / `@RestrictTo` appear on the public surface, and an annotation a consumer's compiler cannot resolve does nothing. Still exactly one dependency. (4) **`-Xannotation-default-target=param-property`** is on for `:canvas`; without it a constructor-property annotation lands on the value parameter only, so a consumer reading the getter sees nothing. Lint then immediately caught a real `@IntDef` gap (`InkChannel.NONE` had to be declared as a legal value) — the annotations are load-bearing, not decorative. (5) **`SproutLog` was created here, not in Phase 2** — D11's missing-`initialize` error needed it. §3.9 corrected: `findViewTreeLifecycleOwner()` cannot be used, it needs `androidx.lifecycle`. Build environment: this machine's default `java` is now JDK 26, which Gradle 8.14 cannot run on — see §5.10. |
 | 2 | Generic engine: capture and render | ⬜ Not started | | | |
 | 3 | Tooling & rendering fidelity | ⬜ Not started | | | |
 | 4 | Onyx adapter (BOOX) | ⬜ Not started | | | |
@@ -1081,6 +1111,18 @@ phase, not by preference.
 | R1 | Which tier hosts the golden-image suite — Robolectric (fast, no device) or instrumented? Depends entirely on Robolectric's graphics fidelity for our renderers. | Phase 2 measurement | Instrumented tier |
 | R2 | Does the Onyx firmware overlay honour **alpha** in live preview? If not, `HIGHLIGHTER` reads opaque while writing and only becomes translucent on commit. | Phase 4 device check | Report the limitation through `capabilities`; never hide it |
 | R3 | Does the Supernote firmware honour a per-stroke width fine enough to express our dp ladder, or is the EMR range coarse? | Phase 5 device tuning | Quantize the ladder to what the hardware actually resolves, and report it |
+
+### 10.3 Resolved in Phase 1 (2026-08-07)
+
+Four API-shape questions that could not be settled from the plan alone, and would have been
+expensive to reverse once the adapters were written against them.
+
+| # | Question | Resolution |
+|---|---|---|
+| P1 | Who owns the arrays handed to `StrokeSamples`? | **Copy on the public constructor, `Builder` on the capture path.** A host cannot corrupt a stored stroke by reusing its own working buffers; the engine path appends without allocating per point and the builder's buffers survive `build()` for reuse across strokes. `array.size == count` is an enforced invariant everywhere. |
+| P2 | How broad is `SproutCanvasListener`? | **Full event set, every method defaulted.** Erase hands back the removed `InkStroke`s, not their ids — the library owns no history, so a host implementing undo would otherwise have to keep a shadow copy of the whole canvas. Installation (`setStrokes`/`addStroke`) fires nothing; removal fires whatever caused it. |
+| P3 | How far does `NoOpInkEngine` go? | **Truly inert.** It reports capabilities and accepts every call, captures nothing and draws nothing. Ingest, removal and listener dispatch are real, so the model is exercisable on a device; capture is exercised by a recording fake in tests. No throwaway code for Phase 2 to unpick. |
+| P4 | How visible are the vendor mapping tables? | **`@RestrictTo(LIBRARY_GROUP)` for the vendor constants, fully public for fidelity.** Adapters compile against `OnyxPenTable` / `SupernotePenTable`; a host app gets a lint error for touching an Onyx style int, and reads `capabilities.fidelity(pen)` instead. |
 
 ---
 

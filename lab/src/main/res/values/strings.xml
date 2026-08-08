@@ -2,5 +2,10 @@
 <resources>
     <string name="app_name">Sprout Canvas Lab</string>
     <string name="library_version">sprout-canvas %1$s</string>
-    <string name="phase_zero_note">Phase 0 — build scaffolding.\nThe canvas arrives in Phase 2.</string>
+    <string name="phase_one_note">Phase 1 — API contract only. The stub engine captures nothing and draws nothing; the buttons below exercise ingest, round-trip and removal for real.</string>
+    <string name="toolbar_label">Toolbar</string>
+    <string name="device_report_heading">Device report</string>
+    <string name="action_ingest">Ingest</string>
+    <string name="action_round_trip">Round-trip</string>
+    <string name="action_clear">Clear</string>
 </resources>

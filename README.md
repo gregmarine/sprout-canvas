@@ -22,12 +22,13 @@ canvas.listener = object : SproutCanvasListener {
 
 ## Status
 
-🚧 **Early development.** The API is not stable and nothing is published to a public registry.
+🚧 **Early development.** The public API exists and is documented as of Phase 1, but **nothing draws
+yet** — the engines arrive in Phases 2–5. Not published to a public registry.
 
 | Phase | | Status |
 |---:|---|---|
 | 0 | Foundation & build scaffolding | ✅ Complete |
-| 1 | Core model & public API contract | ⬜ Not started |
+| 1 | Core model & public API contract | ✅ Complete |
 | 2 | Generic engine: capture and render | ⬜ Not started |
 | 3 | Tooling & rendering fidelity | ⬜ Not started |
 | 4 | Onyx adapter (BOOX) | ⬜ Not started |
@@ -135,6 +136,11 @@ AndroidView(factory = { SproutCanvasView(it) }, modifier = Modifier.fillMaxSize(
 ---
 
 ## Building
+
+Gradle 8.14 must run on **JDK 17** — it cannot run on JDK 21+ toolchains newer than it knows about,
+and on JDK 26 it fails before compiling anything with the unhelpful message `* What went wrong: 26`.
+If your default `java` is newer, either prefix these commands with `JAVA_HOME=<path-to-jdk-17>` or
+set `org.gradle.java.home` in your own `~/.gradle/gradle.properties`.
 
 ```sh
 ./gradlew build test          # compile + JVM tests (JUnit 4 + Robolectric)

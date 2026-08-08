@@ -50,11 +50,19 @@ why the plan is written the way it is.
 These apply everywhere. They are not repeated in the plan's phase sections.
 
 - **Kotlin**, Java 17 target. The toolchain comes from `jvmToolchain(17)` in each module —
-  **never** pin `org.gradle.java.home` in `gradle.properties`. An absolute JDK path in a committed
-  file works on exactly one machine.
-- **`:canvas` has exactly one dependency: `androidx.annotation`.** No coroutines, no serialization,
-  no Material, no Compose. A drawing library must not dictate a host app's stack. Adding anything
-  here needs explicit discussion.
+  **never** pin `org.gradle.java.home` in the repo's `gradle.properties`. An absolute JDK path in a
+  committed file works on exactly one machine.
+  ⚠ **Gradle itself must also run on JDK 17.** This machine's default `java` is JDK 26, which
+  Gradle 8.14 cannot run on; it fails before compiling anything with the message `* What went
+  wrong: 26`. `jvmToolchain` does not help — it picks the JDK that compiles the code, not the one
+  that runs Gradle. Prefix commands with
+  `JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home`, or set
+  `org.gradle.java.home` in `~/.gradle/gradle.properties` (machine-local, uncommitted). See
+  PLAN.md §5.10.
+- **`:canvas` has exactly one dependency: `androidx.annotation`**, on the `api` configuration
+  because its annotations appear on the public surface. No coroutines, no serialization, no
+  Material, no Compose, **no `androidx.lifecycle`**. A drawing library must not dictate a host app's
+  stack. Adding anything here needs explicit discussion.
 - **No vendor types in `:canvas`.** Onyx and Supernote SDK types live in their adapter modules and
   never appear in the public API. A phone-only app must never pull the BOOX SDK.
 - **Explicit API mode is on for `:canvas`** — every public declaration states its visibility and
@@ -63,7 +71,8 @@ These apply everywhere. They are not repeated in the plan's phase sections.
   Raising or lowering it is an architecture change, not a config tweak.
 - **The public API is main-thread only** — documented, and asserted in debug builds.
 - **No `Log.d` directly** — use the `SproutLog` inline wrapper so release consumers pay nothing.
-  *(Does not exist yet — create it with the first code that needs logging, Phase 2.)*
+  `d { }` takes a lambda and is gated on `SproutCanvas.debugLogging`; `w`/`e` always log, because a
+  host that lost the hardware ink path must be told.
 - **Every public type carries KDoc**, including the *why* for anything driven by a device quirk. The
   quirks belong in the code that implements them, not only in the plan.
 - **The library stores nothing.** No persistence, no file formats, no clipboard, no undo/redo, no
@@ -87,6 +96,9 @@ one screen per phase. Do not create ad-hoc test apps; add a screen to the Lab in
 ---
 
 ## Build & test
+
+Prefix every command with `JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home`
+unless the shell's default `java` is already 17 — see the JDK note above.
 
 ```sh
 ./gradlew build test           # compile + JVM tests (JUnit 4 + Robolectric)

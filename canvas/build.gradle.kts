@@ -39,12 +39,25 @@ kotlin {
     // Every declaration in the public surface must state its visibility and return type.
     // This is the library's contract; nothing leaks into it by accident (PLAN.md §6).
     explicitApi()
+
+    compilerOptions {
+        // Annotations on a constructor property (@ColorInt on ToolSpec.color, @InkChannels on
+        // StrokeSamples.channels) currently land on the value parameter only, so a consumer reading
+        // the *getter* sees nothing and lint stays silent. This is Kotlin's announced future
+        // default (KT-73255); opting in early puts the annotation on the property too, which is the
+        // only reason to annotate a public API in the first place.
+        freeCompilerArgs.add("-Xannotation-default-target=param-property")
+    }
 }
 
 dependencies {
     // The ONLY required dependency. A drawing library must not dictate the host app's stack —
     // no coroutines, no serialization, no Material, no Compose (PLAN.md §6).
-    implementation(libs.androidx.annotation)
+    //
+    // `api`, not `implementation`: @ColorInt, @IntDef, @MainThread and @RestrictTo appear on the
+    // public surface, and an annotation a consumer's compiler cannot resolve is an annotation that
+    // does nothing. Still exactly one dependency.
+    api(libs.androidx.annotation)
 
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)

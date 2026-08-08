@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!--
+        XML configuration for SproutCanvasView.
+
+        Everything here has an equivalent Kotlin property; the attributes exist so a canvas dropped
+        into a layout is already armed, without a findViewById round trip in onCreate.
+    -->
+    <declare-styleable name="SproutCanvasView">
+
+        <!--
+            Forces a specific engine by its EngineInfo.id — "generic", "onyx", "supernote".
+
+            Required by the conformance harness: judging whether the hardware and software ink paths
+            agree means forcing a BOOX onto the generic engine and drawing the same stroke twice.
+            An id that is absent or unsupported on this device is logged and ignored, never fatal.
+        -->
+        <attr name="sproutEngine" format="string" />
+
+        <!--
+            The standardized pen. Values match SproutPen's declaration order; SproutPenAttrTest
+            fails the build if the enum is reordered without updating this list.
+        -->
+        <attr name="sproutPen">
+            <enum name="ballpoint" value="0" />
+            <enum name="fountain" value="1" />
+            <enum name="brush" value="2" />
+            <enum name="marker" value="3" />
+            <enum name="highlighter" value="4" />
+            <enum name="pencil" value="5" />
+            <enum name="charcoal" value="6" />
+            <enum name="calligraphy" value="7" />
+            <enum name="dashed" value="8" />
+        </attr>
+
+        <!-- Nominal stroke width in dp, greater than zero. A plain float, not a dimension. -->
+        <attr name="sproutWidthDp" format="float" />
+
+        <!-- ARGB stroke colour. Stored verbatim; never rewritten to suit the device. -->
+        <attr name="sproutColor" format="color" />
+
+    </declare-styleable>
+
+</resources>
